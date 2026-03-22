@@ -25,7 +25,11 @@ import {
   Target,
   LogOut,
   User as UserIcon,
-  Loader2
+  Loader2,
+  LogIn,
+  Cloud,
+  CloudOff,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -41,6 +45,72 @@ import {
   subMonths,
   parseISO
 } from 'date-fns';
+import { auth, db, googleProvider } from './firebase';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signOut, 
+  User 
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  onSnapshot,
+  getDocFromServer
+} from 'firebase/firestore';
+
+// Error Handling Spec for Firestore Operations
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -140,6 +210,11 @@ export default function AppWrapper() {
 }
 
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   const [workout, setWorkout] = useState<WorkoutItem[]>(() => {
     try {
       const saved = localStorage.getItem('sovereign_workout');
@@ -174,6 +249,127 @@ function App() {
   const [lastChecked, setLastChecked] = useState<string | null>(() => {
     return localStorage.getItem('sovereign_last_checked');
   });
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore Connection Test
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+          setSyncError("Cloud connection offline. Check network.");
+        }
+      }
+    }
+    testConnection();
+  }, []);
+
+  // Firestore Sync - Load Data
+  useEffect(() => {
+    if (!isAuthReady || !user) return;
+
+    const userDocRef = doc(db, 'users', user.uid);
+    setIsSyncing(true);
+
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.workout) setWorkout(data.workout);
+        if (data.schedule) setSchedule(data.schedule);
+        if (data.archive) setArchive(data.archive);
+        if (data.exp !== undefined) setExp(data.exp);
+        if (data.lastChecked) setLastChecked(data.lastChecked);
+      } else {
+        // First time user - initialize Firestore with local data or defaults
+        const initialData = {
+          uid: user.uid,
+          workout,
+          schedule,
+          archive,
+          exp,
+          lastChecked,
+          level: 1 // Required per blueprint
+        };
+        setDoc(userDocRef, initialData).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`));
+      }
+      setIsSyncing(false);
+      setSyncError(null);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+      setIsSyncing(false);
+      setSyncError("Sync failed. Permissions or network error.");
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady, user]);
+
+  // Firestore Sync - Save Data (Debounced)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (!isAuthReady || !user || isSyncing) return;
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      const userDocRef = doc(db, 'users', user.uid);
+      try {
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          workout,
+          schedule,
+          archive,
+          exp,
+          lastChecked,
+          level: Math.floor(exp / 1000) + 1,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.error("Failed to save to Firestore", err);
+      }
+    }, 2000); // 2 second debounce
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady]);
+
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const handleLogin = async () => {
+    setAuthError(null);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      console.error("Login failed", error);
+      let message = "Login failed. Please try again.";
+      if (error.code === 'auth/popup-blocked') {
+        message = "Popup blocked! Please allow popups for this site.";
+      } else if (error.code === 'auth/unauthorized-domain') {
+        message = "Domain not authorized in Firebase Console.";
+      } else if (error.message) {
+        message = error.message;
+      }
+      setAuthError(message);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
   const [activeTab, setActiveTab] = useState('Daily Quest');
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -607,15 +803,40 @@ function App() {
           </div>
           
           <div className="flex items-center gap-3 border-l border-outline-variant/20 pl-4">
-            <div className="flex items-center gap-3">
-              <div className="hidden md:block text-right">
-                <div className="text-[8px] font-black text-primary-container uppercase tracking-widest leading-none mb-1">Operator</div>
-                <div className="text-[10px] font-headline text-on-surface uppercase tracking-tight">OPERATOR_01</div>
+            {authError && (
+              <div className="hidden md:flex items-center gap-2 bg-error/10 border border-error/30 px-3 py-1.5 mr-2">
+                <AlertTriangle className="w-3 h-3 text-error" />
+                <span className="text-[8px] font-black text-error uppercase tracking-widest">{authError}</span>
+                <button onClick={() => setAuthError(null)} className="text-error hover:text-white ml-2">×</button>
               </div>
-              <div className="w-8 h-8 border border-primary-container/30 flex items-center justify-center bg-primary-container/10">
-                <UserIcon className="w-4 h-4 text-primary-container" />
+            )}
+            {user ? (
+              <div className="flex items-center gap-3">
+                <div className="hidden md:block text-right">
+                  <div className="text-[8px] font-black text-primary-container uppercase tracking-widest leading-none mb-1">Operator</div>
+                  <div className="text-[10px] font-headline text-on-surface uppercase tracking-tight">{user.displayName || 'OPERATOR_01'}</div>
+                </div>
+                <button 
+                  onClick={handleLogout}
+                  className="w-8 h-8 border border-primary-container/30 flex items-center justify-center bg-primary-container/10 hover:bg-primary-container/20 transition-all group"
+                  title="Logout"
+                >
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <LogOut className="w-4 h-4 text-primary-container group-hover:scale-110 transition-transform" />
+                  )}
+                </button>
               </div>
-            </div>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-3 py-1.5 hover:bg-primary-container/20 transition-all"
+              >
+                <LogIn className="w-4 h-4 text-primary-container" />
+                <span className="font-headline text-[10px] font-black text-primary-container uppercase tracking-widest">Login</span>
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -659,6 +880,26 @@ function App() {
             </button>
 
             <div className="mt-auto px-4 pt-8 border-t border-outline-variant/10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  {isSyncing ? (
+                    <RefreshCw className="w-3 h-3 text-primary-container animate-spin" />
+                  ) : user ? (
+                    <Cloud className="w-3 h-3 text-primary-container" />
+                  ) : (
+                    <CloudOff className="w-3 h-3 text-on-surface-variant/30" />
+                  )}
+                  <span className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest">
+                    {isSyncing ? 'Syncing...' : user ? 'Cloud Active' : 'Offline Mode'}
+                  </span>
+                </div>
+                {syncError && (
+                  <div className="flex items-center gap-1 text-error">
+                    <AlertTriangle className="w-2 h-2" />
+                    <span className="text-[6px] uppercase">{syncError}</span>
+                  </div>
+                )}
+              </div>
               {/* Support and Logs removed per user request */}
             </div>
           </aside>
