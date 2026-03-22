@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { Component, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Bolt, 
   History, 
@@ -22,7 +22,10 @@ import {
   Activity,
   Zap,
   Shield,
-  Target
+  Target,
+  LogOut,
+  User as UserIcon,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -38,6 +41,61 @@ import {
   subMonths,
   parseISO
 } from 'date-fns';
+
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorInfo: string | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, errorInfo: null };
+  props: ErrorBoundaryProps;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error.message };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center p-8">
+          <div className="max-w-md w-full bg-surface-container-low border border-error/30 p-8 text-center">
+            <AlertTriangle className="w-12 h-12 text-error mx-auto mb-4" />
+            <h2 className="font-headline text-xl font-black text-on-surface uppercase tracking-tighter mb-2">System Critical Error</h2>
+            <p className="text-on-surface-variant text-xs uppercase tracking-widest mb-6 leading-relaxed">
+              The protocol has encountered a fatal exception. Please refresh or contact support.
+            </p>
+            <div className="bg-error/5 p-4 mb-6 text-left overflow-auto max-h-32">
+              <code className="text-[10px] text-error font-mono break-all">{this.state.errorInfo}</code>
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-primary-container text-on-primary-container font-headline text-[10px] font-black tracking-widest uppercase py-3 hover:brightness-110 transition-all"
+            >
+              Reboot System
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+
 
 interface WorkoutItem {
   id: string;
@@ -73,7 +131,15 @@ interface ArchiveEntry {
   progress?: number;
 }
 
-export default function App() {
+export default function AppWrapper() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+function App() {
   const [workout, setWorkout] = useState<WorkoutItem[]>(() => {
     const saved = localStorage.getItem('sovereign_workout');
     return saved ? JSON.parse(saved) : INITIAL_WORKOUT;
@@ -86,6 +152,13 @@ export default function App() {
     const saved = localStorage.getItem('sovereign_archive');
     return saved ? JSON.parse(saved) : [];
   });
+  const [exp, setExp] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_exp');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [lastChecked, setLastChecked] = useState<string | null>(() => {
+    return localStorage.getItem('sovereign_last_checked');
+  });
   const [activeTab, setActiveTab] = useState('Daily Quest');
   const [selectedDay, setSelectedDay] = useState('Monday');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -96,10 +169,29 @@ export default function App() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedArchiveDate, setSelectedArchiveDate] = useState<Date | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
-  const [exp, setExp] = useState<number>(() => {
-    const saved = localStorage.getItem('sovereign_exp');
-    return saved ? parseInt(saved) : 0;
-  });
+
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem('sovereign_workout', JSON.stringify(workout));
+  }, [workout]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_schedule', JSON.stringify(schedule));
+  }, [schedule]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_archive', JSON.stringify(archive));
+  }, [archive]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_exp', exp.toString());
+  }, [exp]);
+
+  useEffect(() => {
+    if (lastChecked) {
+      localStorage.setItem('sovereign_last_checked', lastChecked);
+    }
+  }, [lastChecked]);
 
   const RANKS = useMemo(() => [
     { name: 'E', min: 0, max: 1000, title: 'RECRUIT' },
@@ -149,102 +241,98 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Persistence Effects
-  useEffect(() => {
-    localStorage.setItem('sovereign_workout', JSON.stringify(workout));
-  }, [workout]);
+  // Persistence Effects (REPLACED BY FIRESTORE)
+  // We now use updateDoc/setDoc in the action handlers instead of these effects
 
-  useEffect(() => {
-    localStorage.setItem('sovereign_schedule', JSON.stringify(schedule));
-  }, [schedule]);
-
-  useEffect(() => {
-    localStorage.setItem('sovereign_archive', JSON.stringify(archive));
-  }, [archive]);
-
-  useEffect(() => {
-    localStorage.setItem('sovereign_exp', exp.toString());
-  }, [exp]);
-
-  // Auto-Violation Check & Daily Reset
+  // Daily Reset & Violation Check
   useEffect(() => {
     const checkViolations = () => {
-      const lastChecked = localStorage.getItem('sovereign_last_check');
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
 
       if (lastChecked && lastChecked !== todayStr) {
         const lastDate = new Date(lastChecked);
-        const missedDays: ArchiveEntry[] = [];
+        let totalPenalty = 0;
+        let newEntries: ArchiveEntry[] = [];
         
-        // Check each day between lastChecked and today
         let checkDate = new Date(lastDate);
         checkDate.setDate(checkDate.getDate() + 1);
+        let iterations = 0;
 
-        while (checkDate.toISOString().split('T')[0] < todayStr) {
+        while (checkDate.toISOString().split('T')[0] < todayStr && iterations < 31) {
           const dateStr = checkDate.toISOString().split('T')[0];
           const dayName = DAYS[checkDate.getDay() === 0 ? 6 : checkDate.getDay() - 1];
           
-          // Check if this day already has a completion or punishment
           const hasEntry = archive.some(entry => entry.date === dateStr);
           
           if (!hasEntry) {
-            missedDays.push({
-              id: Math.random().toString(36).substr(2, 9),
+            const entryId = Math.random().toString(36).substr(2, 9);
+            newEntries.push({
+              id: entryId,
               date: dateStr,
               day: dayName,
               type: 'PUNISHMENT',
               details: `Protocol Violation: Missed ${dayName} Cycle (Auto-Logged)`,
             });
-            setExp(prev => Math.max(0, prev - 1000)); // Missed day penalty
+            totalPenalty += 1000;
           }
           
           checkDate.setDate(checkDate.getDate() + 1);
+          iterations++;
         }
 
-        if (missedDays.length > 0) {
-          setArchive(prev => [...missedDays, ...prev]);
+        if (newEntries.length > 0) {
+          setArchive(prev => [...newEntries, ...prev]);
+          setExp(prev => prev - totalPenalty);
         }
 
-        // Auto-fill Daily Quest with exercises from the current day's schedule
+        // Auto-fill Daily Quest
         const todaySchedule = schedule.find(s => s.day === currentDayName);
         if (todaySchedule) {
           setWorkout(todaySchedule.exercises.map(ex => ({ ...ex, completed: false })));
         } else {
           setWorkout([]);
         }
+
+        setLastChecked(todayStr);
       } else if (!lastChecked) {
-        // First time initialization
         const todaySchedule = schedule.find(s => s.day === currentDayName);
-        if (todaySchedule && todaySchedule.exercises.length > 0) {
+        if (todaySchedule) {
           setWorkout(todaySchedule.exercises.map(ex => ({ ...ex, completed: false })));
         }
+        setLastChecked(todayStr);
       }
-      
-      localStorage.setItem('sovereign_last_check', todayStr);
     };
 
     checkViolations();
-  }, [archive, schedule]);
+  }, [lastChecked, archive, schedule]);
 
   // Sync today's workout with schedule changes
   useEffect(() => {
+    if (schedule.length === 0) return;
     const today = new Date();
     const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
     const todaySchedule = schedule.find(s => s.day === currentDayName);
     
     if (todaySchedule) {
-      // Only sync if the exercises are different (to avoid infinite loops or resetting progress)
-      // We check if names match to see if it's the same list
-      const scheduleNames = todaySchedule.exercises.map(e => e.name).join('|');
-      const workoutNames = workout.map(e => e.name).join('|');
+      const scheduleIds = todaySchedule.exercises.map(e => e.id);
+      const workoutIds = workout.map(e => e.id);
       
-      if (scheduleNames !== workoutNames) {
-        setWorkout(todaySchedule.exercises.map(ex => ({ ...ex, completed: false })));
+      // Find exercises to add
+      const toAdd = todaySchedule.exercises.filter(ex => !workoutIds.includes(ex.id));
+      // Find exercises to remove
+      const toRemove = workout.filter(ex => !scheduleIds.includes(ex.id));
+      
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        setWorkout(prev => {
+          const filtered = prev.filter(ex => scheduleIds.includes(ex.id));
+          const added = toAdd.map(ex => ({ ...ex, completed: false }));
+          return [...filtered, ...added];
+        });
       }
     }
-  }, [schedule]);
+  }, [schedule, workout]);
 
   const logWorkout = useCallback(() => {
     const today = new Date();
@@ -266,16 +354,12 @@ export default function App() {
       progress: currentProgress
     };
 
-    setArchive(prev => [entry, ...prev]);
-    setIsTimerActive(false);
+    const expChange = currentProgress === 100 ? 500 : -300;
 
-    // Apply EXP changes
-    if (currentProgress === 100) {
-      setExp(prev => prev + 500); // Completion bonus
-    } else {
-      setExp(prev => Math.max(0, prev - 300)); // Breach penalty
-    }
-  }, [workout, archive]);
+    setArchive(prev => [entry, ...prev]);
+    setExp(prev => prev + expChange);
+    setIsTimerActive(false);
+  }, [workout, archive, exp]);
 
   const completedCount = workout.filter(item => item.completed).length;
   const progress = Math.round((completedCount / workout.length) * 100);
@@ -318,20 +402,18 @@ export default function App() {
     if (!isTimerActive) {
       setIsTimerActive(true);
     }
-    setWorkout(prev => prev.map(item => {
-      if (item.id === id) {
-        const newCompleted = !item.completed;
-        setExp(prevExp => newCompleted ? prevExp + 100 : Math.max(0, prevExp - 100));
-        return { ...item, completed: newCompleted };
-      }
-      return item;
-    }));
+    const item = workout.find(i => i.id === id);
+    if (!item) return;
+
+    const newCompleted = !item.completed;
+    const expChange = newCompleted ? 100 : -100;
+
+    setWorkout(prev => prev.map(i => i.id === id ? { ...i, completed: newCompleted } : i));
+    setExp(prev => prev + expChange);
   };
 
   const updateWorkoutItem = (id: string, field: keyof WorkoutItem, value: string | number) => {
-    setWorkout(prev => prev.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+    setWorkout(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
   const getOverloadSuggestion = (exerciseName: string) => {
@@ -393,18 +475,13 @@ export default function App() {
   };
 
   const clearArchive = () => {
-    // Clear localStorage first to ensure it's gone before reload
-    localStorage.clear();
-    
-    // Update state for immediate feedback
     setArchive([]);
     setWorkout([]);
-    setSchedule(DAYS.map(day => ({ day, exercises: [] })));
+    setSchedule(INITIAL_SCHEDULE);
     setExp(0);
+    setLastChecked(null);
+    localStorage.clear();
     setShowPurgeModal(false);
-    
-    // Force a reload to ensure all states are clean from initializers
-    window.location.reload();
   };
 
   const calculateStreak = () => {
@@ -497,79 +574,82 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
       {/* Top Navigation */}
-      <nav className="fixed top-0 w-full z-50 border-b border-primary-container/15 bg-background/80 backdrop-blur-xl flex justify-between items-center px-8 py-4">
-        <div className="text-lg md:text-2xl font-black tracking-widest text-primary-container glow-text-primary font-headline uppercase">
+      <nav className="fixed top-0 w-full z-50 border-b border-primary-container/15 bg-background/80 backdrop-blur-xl flex justify-between items-center px-4 md:px-8 py-4">
+        <div className="text-sm md:text-2xl font-black tracking-widest text-primary-container glow-text-primary font-headline uppercase">
           THE SOVEREIGN PROTOCOL
         </div>
-        <div className="hidden md:flex space-x-8 font-headline uppercase text-[10px] tracking-[0.2em]">
-          {['Daily Quest', 'Workout Archive', 'Schedule', 'User Stats'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`transition-colors hover:text-primary ${
-                activeTab === tab ? 'text-primary-container border-b-2 border-primary-container pb-1' : 'text-on-surface-variant'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-        <div className="hidden md:flex items-center gap-6">
-          <div className="flex flex-col items-end">
-            <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Protocol Time</span>
-            <span className={`font-mono text-sm ${isTimerActive ? 'text-primary-container glow-text-primary' : 'text-on-surface-variant'}`}>
-              {formatTime(timer)}
-            </span>
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex space-x-8 font-headline uppercase text-[10px] tracking-[0.2em]">
+            {['Daily Quest', 'Workout Archive', 'Schedule', 'User Stats'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`transition-all hover:text-primary-container ${activeTab === tab ? 'text-primary-container font-black' : 'text-on-surface-variant'}`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
-          <div className="flex items-center space-x-6">
-            {/* Icons removed per user request */}
+          
+          <div className="flex items-center gap-3 border-l border-outline-variant/20 pl-4">
+            <div className="flex items-center gap-3">
+              <div className="hidden md:block text-right">
+                <div className="text-[8px] font-black text-primary-container uppercase tracking-widest leading-none mb-1">Operator</div>
+                <div className="text-[10px] font-headline text-on-surface uppercase tracking-tight">OPERATOR_01</div>
+              </div>
+              <div className="w-8 h-8 border border-primary-container/30 flex items-center justify-center bg-primary-container/10">
+                <UserIcon className="w-4 h-4 text-primary-container" />
+              </div>
+            </div>
           </div>
         </div>
       </nav>
 
-      {/* Sidebar Navigation */}
-      <aside className={`hidden md:flex fixed left-0 top-0 h-full w-64 z-40 border-r border-primary-container/10 bg-[#0e0e0e] flex-col py-20 px-4 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="mb-12 px-4">
-          <div className="text-primary-container font-black font-headline text-[10px] uppercase tracking-[0.2em]">RANK: {currentRank.name}</div>
-          <div className="text-on-surface-variant font-headline text-[8px] tracking-[0.2em]">{currentRank.title} ACTIVE</div>
-        </div>
-        
-        <div className="space-y-2 flex-grow">
-          {[
-            { name: 'Daily Quest', icon: Bolt },
-            { name: 'Workout Archive', icon: History },
-            { name: 'Schedule', icon: CalendarIcon },
-            { name: 'User Stats', icon: BarChart3 },
-          ].map((item) => (
-            <button
-              key={item.name}
-              onClick={() => setActiveTab(item.name)}
-              className={`w-full flex items-center space-x-3 p-3 font-headline text-[10px] font-bold uppercase tracking-[0.2em] transition-all hover:translate-x-1 ${
-                activeTab === item.name
-                  ? 'text-primary-container bg-surface-container-low border-l-4 border-primary-container' 
-                  : 'text-on-surface-variant/50 hover:text-on-surface hover:bg-surface-container-high'
-              }`}
-            >
-              <item.icon className="w-4 h-4" />
-              <span>{item.name}</span>
-            </button>
-          ))}
-        </div>
-
-        <button 
-          onClick={startWorkout}
-          className="mt-8 bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-widest uppercase hover:brightness-125 transition-all active:scale-95"
-        >
-          INITIALIZE WORKOUT
-        </button>
-
-        <div className="mt-auto px-4 pt-8 border-t border-outline-variant/10">
-          {/* Support and Logs removed per user request */}
-        </div>
-      </aside>
-
       {/* Main Content */}
-      <main className="md:ml-64 pt-20 md:pt-24 pb-32 md:pb-12 px-4 md:px-8">
+      <>
+          {/* Sidebar Navigation */}
+          <aside className={`hidden md:flex fixed left-0 top-0 h-full w-64 z-40 border-r border-primary-container/10 bg-[#0e0e0e] flex-col py-20 px-4 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="mb-12 px-4">
+              <div className="text-primary-container font-black font-headline text-[10px] uppercase tracking-[0.2em]">RANK: {currentRank.name}</div>
+              <div className="text-on-surface-variant font-headline text-[8px] tracking-[0.2em]">{currentRank.title} ACTIVE</div>
+            </div>
+            
+            <div className="space-y-2 flex-grow">
+              {[
+                { name: 'Daily Quest', icon: Bolt },
+                { name: 'Workout Archive', icon: History },
+                { name: 'Schedule', icon: CalendarIcon },
+                { name: 'User Stats', icon: BarChart3 },
+              ].map((item) => (
+                <button
+                  key={item.name}
+                  onClick={() => setActiveTab(item.name)}
+                  className={`w-full flex items-center space-x-3 p-3 font-headline text-[10px] font-bold uppercase tracking-[0.2em] transition-all hover:translate-x-1 ${
+                    activeTab === item.name
+                      ? 'text-primary-container bg-surface-container-low border-l-4 border-primary-container' 
+                      : 'text-on-surface-variant/50 hover:text-on-surface hover:bg-surface-container-high'
+                  }`}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span>{item.name}</span>
+                </button>
+              ))}
+            </div>
+
+            <button 
+              onClick={startWorkout}
+              className="mt-8 bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-widest uppercase hover:brightness-125 transition-all active:scale-95"
+            >
+              INITIALIZE WORKOUT
+            </button>
+
+            <div className="mt-auto px-4 pt-8 border-t border-outline-variant/10">
+              {/* Support and Logs removed per user request */}
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="md:ml-64 pt-20 md:pt-24 pb-32 md:pb-12 px-4 md:px-8">
         <div className="max-w-6xl mx-auto space-y-4 md:space-y-12">
           {activeTab === 'Daily Quest' && (
             <>
@@ -1348,6 +1428,7 @@ export default function App() {
           </button>
         ))}
       </div>
-    </div>
+    </>
+  </div>
   );
 }
