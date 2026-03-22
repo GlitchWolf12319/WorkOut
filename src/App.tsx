@@ -29,7 +29,8 @@ import {
   LogIn,
   Cloud,
   CloudOff,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -199,6 +200,7 @@ interface ArchiveEntry {
   details: string;
   exercises?: WorkoutItem[];
   progress?: number;
+  duration?: number;
 }
 
 export default function AppWrapper() {
@@ -388,6 +390,9 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedArchiveDate, setSelectedArchiveDate] = useState<Date | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
+  const [isRestDayModalOpen, setIsRestDayModalOpen] = useState(false);
+  const [isWorkoutInitModalOpen, setIsWorkoutInitModalOpen] = useState(false);
+  const [isWorkoutActive, setIsWorkoutActive] = useState(false);
 
   // Persistence Effects
   useEffect(() => {
@@ -526,6 +531,7 @@ function App() {
           setWorkout([]);
         }
 
+        setIsWorkoutActive(false);
         setLastChecked(todayStr);
       } else if (!lastChecked) {
         const todaySchedule = schedule.find(s => s.day === currentDayName);
@@ -583,7 +589,8 @@ function App() {
         ? `Completed Protocol: ${dayName} Cycle` 
         : `Breached Protocol: ${dayName} Cycle (${currentProgress}%)`,
       exercises: [...workout],
-      progress: currentProgress
+      progress: currentProgress,
+      duration: timer
     };
 
     const expChange = currentProgress === 100 ? 500 : -300;
@@ -591,16 +598,26 @@ function App() {
     setArchive(prev => [entry, ...prev]);
     setExp(prev => prev + expChange);
     setIsTimerActive(false);
-  }, [workout, archive, exp]);
+    setIsWorkoutActive(false);
+  }, [workout, archive, exp, timer]);
 
   const completedCount = workout.filter(item => item.completed).length;
   const progress = workout.length > 0 ? Math.round((completedCount / workout.length) * 100) : 100;
   const isRestDay = workout.length === 0;
+  
+  // Handle rest day state
+  useEffect(() => {
+    if (isRestDay) {
+      setIsTimerActive(false);
+      setTimer(0);
+    }
+  }, [isRestDay]);
 
   // Auto-Complete when 100%
   useEffect(() => {
     if (progress === 100 && workout.length > 0 && isTimerActive) {
       setIsTimerActive(false);
+      setIsWorkoutActive(false);
       const todayStr = new Date().toISOString().split('T')[0];
       const alreadyLogged = archive.some(entry => entry.date === todayStr && entry.type === 'COMPLETED');
       if (!alreadyLogged) {
@@ -611,13 +628,13 @@ function App() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isTimerActive) {
+    if (isTimerActive && !isRestDay) {
       interval = setInterval(() => {
         setTimer(prev => prev + 1);
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isTimerActive]);
+  }, [isTimerActive, isRestDay]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -627,6 +644,19 @@ function App() {
 
   const startWorkout = () => {
     setActiveTab('Daily Quest');
+    if (isRestDay) {
+      setIsRestDayModalOpen(true);
+      setIsWorkoutActive(true);
+      return;
+    }
+    
+    // If re-initializing a completed workout, reset completion status
+    if (progress === 100 && workout.length > 0) {
+      setWorkout(prev => prev.map(ex => ({ ...ex, completed: false })));
+    }
+
+    setIsWorkoutActive(true);
+    setIsWorkoutInitModalOpen(true);
     setIsTimerActive(true);
     setTimer(0);
   };
@@ -993,20 +1023,22 @@ function App() {
                   <span className="font-label text-primary-container text-[8px] md:text-[10px] tracking-[0.4em] uppercase">Current Operation</span>
                   <h1 className="font-headline text-2xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-1 md:mt-2">The Daily Quest</h1>
                 </div>
-                <div className="w-full md:w-auto text-left md:text-right">
-                  <div className="font-label text-on-surface-variant text-[8px] md:text-[10px] tracking-[0.2em] uppercase mb-1 md:mb-2">Completion Status</div>
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <span className="font-headline text-xl md:text-3xl font-bold text-primary-container">{progress}%</span>
-                    <div className="flex-grow md:w-64 h-2 md:h-3 bg-surface-container-highest relative overflow-hidden">
-                      <div className="absolute inset-0 scanline-overlay z-10"></div>
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        className="h-full bg-gradient-to-r from-primary to-primary-container shadow-[0_0_10px_rgba(0,229,255,0.4)]"
-                      />
+                {isWorkoutActive && (
+                  <div className="w-full md:w-auto text-left md:text-right">
+                    <div className="font-label text-on-surface-variant text-[8px] md:text-[10px] tracking-[0.2em] uppercase mb-1 md:mb-2">Completion Status</div>
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <span className="font-headline text-xl md:text-3xl font-bold text-primary-container">{progress}%</span>
+                      <div className="flex-grow md:w-64 h-2 md:h-3 bg-surface-container-highest relative overflow-hidden">
+                        <div className="absolute inset-0 scanline-overlay z-10"></div>
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress}%` }}
+                          className="h-full bg-gradient-to-r from-primary to-primary-container shadow-[0_0_10px_rgba(0,229,255,0.4)]"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Bento Grid */}
@@ -1046,14 +1078,46 @@ function App() {
 
                 {/* Workout Checklist */}
                 <div className="lg:col-span-2 space-y-4 md:space-y-6">
-                  {isRestDay ? (
+                  {!isWorkoutActive ? (
                     <div className="flex flex-col items-center justify-center py-20 border border-dashed border-outline-variant/20 bg-surface-container-low/20">
-                      <Shield className="w-16 h-16 text-primary-container/20 mb-4" />
-                      <h3 className="font-headline text-lg font-black text-on-surface-variant uppercase tracking-widest">Rest Day Active</h3>
+                      {progress === 100 && workout.length > 0 ? (
+                        <>
+                          <CheckCircle2 className="w-16 h-16 text-emerald-500/40 mb-4" />
+                          <h3 className="font-headline text-lg font-black text-emerald-400 uppercase tracking-widest">Protocol Secured</h3>
+                          <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2 text-center px-8">
+                            All objectives for this cycle have been met. System in post-mission standby.
+                          </p>
+                          <button 
+                            onClick={startWorkout}
+                            className="mt-6 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-8 py-3 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:bg-emerald-500/20 transition-all"
+                          >
+                            Re-Initialize Protocol
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-16 h-16 text-primary-container/20 mb-4" />
+                          <h3 className="font-headline text-lg font-black text-on-surface-variant uppercase tracking-widest">Protocol Locked</h3>
+                          <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2 text-center px-8">
+                            {isRestDay ? 'System in standby mode. No objectives assigned.' : 'Initialize workout to unlock today\'s objectives.'}
+                          </p>
+                          <button 
+                            onClick={startWorkout}
+                            className="mt-6 bg-primary-container text-on-primary-container px-8 py-3 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-110 transition-all"
+                          >
+                            Initialize Workout
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : isRestDay ? (
+                    <div className="flex flex-col items-center justify-center py-20 border border-dashed border-emerald-500/20 bg-surface-container-low/20">
+                      <Shield className="w-16 h-16 text-emerald-500/20 mb-4" />
+                      <h3 className="font-headline text-lg font-black text-emerald-400 uppercase tracking-widest">Rest Day Active</h3>
                       <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2">No objectives assigned for this cycle.</p>
                       <button 
                         onClick={() => setActiveTab('Schedule')}
-                        className="mt-6 text-primary-container font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:underline"
+                        className="mt-6 text-emerald-400 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:underline"
                       >
                         Modify Schedule
                       </button>
@@ -1177,7 +1241,7 @@ function App() {
                   {/* Status HUD */}
                   <div className="hidden md:block bg-surface-container-low/30 border border-outline-variant/10 p-4 md:p-6 space-y-3 md:space-y-4">
                     {[
-                      { label: 'Protocol Duration', value: formatTime(timer), color: 'text-primary-container', icon: Terminal },
+                      { label: 'Protocol Duration', value: isRestDay ? 'RECOVERY' : formatTime(timer), color: isRestDay ? 'text-emerald-400' : 'text-primary-container', icon: isRestDay ? Shield : Terminal },
                       { label: 'System Latency', value: '12ms', color: 'text-primary-container' },
                       { label: 'Active Buff', value: 'PRE-WORKOUT ADRENALINE', color: 'text-primary' },
                     ].map((stat) => (
@@ -1190,9 +1254,9 @@ function App() {
                       </div>
                     ))}
                     <div className="pt-2">
-                      <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">Primary Objective</div>
+                      <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">LONE WOLF</div>
                       <div className="font-headline text-[10px] font-bold text-on-surface uppercase leading-relaxed">
-                        COMPLETE 100 REPS TOTAL TO UNLOCK ARCHIVE DATA
+                        CURRENT OBJECTIVE: SURVIVE
                       </div>
                     </div>
                   </div>
@@ -1236,8 +1300,12 @@ function App() {
                         <Lock className="w-3 h-3 md:w-4 md:h-4 text-on-surface-variant" />
                       </div>
                       <div>
-                        <div className="font-headline text-[9px] md:text-[10px] font-bold uppercase tracking-tight">Legionnaire Protocol</div>
-                        <div className="text-[7px] md:text-[8px] text-on-surface-variant uppercase tracking-wider">Unlocks after 5 consecutive Quests.</div>
+                        <div className="font-headline text-[9px] md:text-[10px] font-bold uppercase tracking-tight">MOUNTAIN DEW PROTOCOL</div>
+                        <div className="text-[7px] md:text-[8px] text-on-surface-variant uppercase tracking-wider">
+                          {exp < 10000 
+                            ? `GET ${10000 - exp} MORE EXP TO UNLOCK` 
+                            : 'PROTOCOL UNLOCKED'}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1517,8 +1585,14 @@ function App() {
                                    <AlertTriangle className="w-4 h-4 text-error" />}
                                   <span className="font-headline text-sm font-bold uppercase tracking-tight">{entry.details}</span>
                                 </div>
-                                <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">
-                                  Status: {entry.type} {entry.progress !== undefined && `(${entry.progress}%)`}
+                                <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest flex items-center gap-3">
+                                  <span>Status: {entry.type} {entry.progress !== undefined && `(${entry.progress}%)`}</span>
+                                  {entry.duration !== undefined && (
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="w-2 h-2" />
+                                      {formatTime(entry.duration)}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -1710,6 +1784,80 @@ function App() {
                   ABORT SEQUENCE
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Rest Day Alert Modal */}
+      <AnimatePresence>
+        {isRestDayModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRestDayModalOpen(false)}
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-sm bg-surface-container-low border border-emerald-500/30 p-8 shadow-[0_0_50px_rgba(16,185,129,0.1)]"
+            >
+              <div className="flex items-center gap-4 text-emerald-400 mb-6">
+                <Shield className="w-8 h-8" />
+                <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">RECOVERY ACTIVE</h3>
+              </div>
+              
+              <p className="text-on-surface-variant text-sm leading-relaxed mb-8 uppercase tracking-wide">
+                CURRENTLY REST DAY ACTIVE. SYSTEM IS IN STANDBY MODE. NO OBJECTIVES ASSIGNED FOR THIS CYCLE.
+              </p>
+
+              <button 
+                onClick={() => setIsRestDayModalOpen(false)}
+                className="w-full bg-emerald-500 text-on-emerald py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+              >
+                ACKNOWLEDGE
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Workout Initialized Modal */}
+      <AnimatePresence>
+        {isWorkoutInitModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsWorkoutInitModalOpen(false)}
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-sm bg-surface-container-low border border-primary-container/30 p-8 shadow-[0_0_50px_rgba(0,229,255,0.2)]"
+            >
+              <div className="flex items-center gap-4 text-primary-container mb-6">
+                <Rocket className="w-8 h-8" />
+                <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">PROTOCOL ENGAGED</h3>
+              </div>
+              
+              <p className="text-on-surface-variant text-sm leading-relaxed mb-8 uppercase tracking-wide">
+                DAILY QUEST INITIALIZED. ALL OBJECTIVES ARE NOW UNLOCKED. SYSTEM IS TRACKING PERFORMANCE.
+              </p>
+
+              <button 
+                onClick={() => setIsWorkoutInitModalOpen(false)}
+                className="w-full bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+              >
+                BEGIN MISSION
+              </button>
             </motion.div>
           </div>
         )}
