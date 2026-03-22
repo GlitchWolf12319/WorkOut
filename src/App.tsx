@@ -282,13 +282,20 @@ function App() {
     setIsSyncing(true);
 
     const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      // If the snapshot has pending writes, it means it's a local echo of a change we just made.
+      // We already have this data in our React state, so we skip to avoid "flickering" or reverts.
+      if (docSnap.metadata.hasPendingWrites) return;
+
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.workout) setWorkout(data.workout);
-        if (data.schedule) setSchedule(data.schedule);
-        if (data.archive) setArchive(data.archive);
-        if (data.exp !== undefined) setExp(data.exp);
-        if (data.lastChecked) setLastChecked(data.lastChecked);
+        
+        // Only update if the data is actually different to prevent unnecessary re-renders
+        // and potential race conditions with local state updates.
+        setWorkout(prev => JSON.stringify(prev) !== JSON.stringify(data.workout) ? data.workout : prev);
+        setSchedule(prev => JSON.stringify(prev) !== JSON.stringify(data.schedule) ? data.schedule : prev);
+        setArchive(prev => JSON.stringify(prev) !== JSON.stringify(data.archive) ? data.archive : prev);
+        setExp(prev => prev !== data.exp ? data.exp : prev);
+        setLastChecked(prev => prev !== data.lastChecked ? data.lastChecked : prev);
       } else {
         // First time user - initialize Firestore with local data or defaults
         const initialData = {
@@ -298,7 +305,8 @@ function App() {
           archive,
           exp,
           lastChecked,
-          level: 1 // Required per blueprint
+          level: 1,
+          updatedAt: new Date().toISOString()
         };
         setDoc(userDocRef, initialData).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`));
       }
@@ -528,22 +536,23 @@ function App() {
     
     if (todaySchedule) {
       const scheduleIds = todaySchedule.exercises.map(e => e.id);
-      const workoutIds = workout.map(e => e.id);
       
-      // Find exercises to add
-      const toAdd = todaySchedule.exercises.filter(ex => !workoutIds.includes(ex.id));
-      // Find exercises to remove
-      const toRemove = workout.filter(ex => !scheduleIds.includes(ex.id));
-      
-      if (toAdd.length > 0 || toRemove.length > 0) {
-        setWorkout(prev => {
-          const filtered = prev.filter(ex => scheduleIds.includes(ex.id));
-          const added = toAdd.map(ex => ({ ...ex, completed: false }));
-          return [...filtered, ...added];
-        });
-      }
+      setWorkout(prev => {
+        const workoutIds = prev.map(e => e.id);
+        
+        // Find exercises to add
+        const toAdd = todaySchedule.exercises.filter(ex => !workoutIds.includes(ex.id));
+        // Find exercises to remove
+        const toRemove = prev.filter(ex => !scheduleIds.includes(ex.id));
+        
+        if (toAdd.length === 0 && toRemove.length === 0) return prev;
+
+        const filtered = prev.filter(ex => scheduleIds.includes(ex.id));
+        const added = toAdd.map(ex => ({ ...ex, completed: false }));
+        return [...filtered, ...added];
+      });
     }
-  }, [schedule, workout]);
+  }, [schedule]);
 
   const logWorkout = useCallback(() => {
     const today = new Date();
