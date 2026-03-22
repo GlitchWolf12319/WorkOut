@@ -141,16 +141,31 @@ export default function AppWrapper() {
 
 function App() {
   const [workout, setWorkout] = useState<WorkoutItem[]>(() => {
-    const saved = localStorage.getItem('sovereign_workout');
-    return saved ? JSON.parse(saved) : INITIAL_WORKOUT;
+    try {
+      const saved = localStorage.getItem('sovereign_workout');
+      return saved ? JSON.parse(saved) : INITIAL_WORKOUT;
+    } catch (e) {
+      console.error("Failed to parse workout from localStorage", e);
+      return INITIAL_WORKOUT;
+    }
   });
   const [schedule, setSchedule] = useState<ScheduleDay[]>(() => {
-    const saved = localStorage.getItem('sovereign_schedule');
-    return saved ? JSON.parse(saved) : INITIAL_SCHEDULE;
+    try {
+      const saved = localStorage.getItem('sovereign_schedule');
+      return saved ? JSON.parse(saved) : INITIAL_SCHEDULE;
+    } catch (e) {
+      console.error("Failed to parse schedule from localStorage", e);
+      return INITIAL_SCHEDULE;
+    }
   });
   const [archive, setArchive] = useState<ArchiveEntry[]>(() => {
-    const saved = localStorage.getItem('sovereign_archive');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('sovereign_archive');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to parse archive from localStorage", e);
+      return [];
+    }
   });
   const [exp, setExp] = useState<number>(() => {
     const saved = localStorage.getItem('sovereign_exp');
@@ -241,8 +256,8 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Persistence Effects (REPLACED BY FIRESTORE)
-  // We now use updateDoc/setDoc in the action handlers instead of these effects
+  // Persistence Effects
+  // Data is automatically saved to localStorage whenever state changes.
 
   // Daily Reset & Violation Check
   useEffect(() => {
