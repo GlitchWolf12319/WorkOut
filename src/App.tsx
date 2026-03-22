@@ -484,8 +484,10 @@ function App() {
           const dayName = DAYS[checkDate.getDay() === 0 ? 6 : checkDate.getDay() - 1];
           
           const hasEntry = archive.some(entry => entry.date === dateStr);
+          const daySchedule = schedule.find(s => s.day === dayName);
+          const isRestDay = !daySchedule || daySchedule.exercises.length === 0;
           
-          if (!hasEntry) {
+          if (!hasEntry && !isRestDay) {
             const entryId = Math.random().toString(36).substr(2, 9);
             newEntries.push({
               id: entryId,
@@ -495,6 +497,16 @@ function App() {
               details: `Protocol Violation: Missed ${dayName} Cycle (Auto-Logged)`,
             });
             totalPenalty += 1000;
+          } else if (!hasEntry && isRestDay) {
+            // Log a rest day entry so we don't keep checking it
+            const entryId = Math.random().toString(36).substr(2, 9);
+            newEntries.push({
+              id: entryId,
+              date: dateStr,
+              day: dayName,
+              type: 'COMPLETED',
+              details: `Rest Day: ${dayName} Recovery Protocol`,
+            });
           }
           
           checkDate.setDate(checkDate.getDate() + 1);
@@ -582,7 +594,8 @@ function App() {
   }, [workout, archive, exp]);
 
   const completedCount = workout.filter(item => item.completed).length;
-  const progress = Math.round((completedCount / workout.length) * 100);
+  const progress = workout.length > 0 ? Math.round((completedCount / workout.length) * 100) : 100;
+  const isRestDay = workout.length === 0;
 
   // Auto-Complete when 100%
   useEffect(() => {
@@ -923,13 +936,17 @@ function App() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className={`relative p-4 md:p-6 overflow-hidden border-l-4 ${
-                  progress === 100 
+                  isRestDay
+                    ? 'bg-primary-container/5 border-primary-container/30'
+                    : progress === 100 
                     ? 'bg-primary-container/10 border-primary-container' 
                     : 'bg-error-container/20 border-error'
                 }`}
               >
                 <div className="absolute top-0 right-0 p-2 opacity-5">
-                  {progress === 100 ? (
+                  {isRestDay ? (
+                    <Shield className="w-24 h-24 md:w-32 md:h-32 text-primary-container" />
+                  ) : progress === 100 ? (
                     <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-primary-container" />
                   ) : (
                     <AlertTriangle className="w-24 h-24 md:w-32 md:h-32 text-error" />
@@ -938,9 +955,14 @@ function App() {
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
                   <div>
                     <h2 className={`font-headline font-black text-lg md:text-xl tracking-tighter uppercase flex items-center gap-2 ${
-                      progress === 100 ? 'text-primary-container' : 'text-error'
+                      isRestDay ? 'text-primary-container/60' : progress === 100 ? 'text-primary-container' : 'text-error'
                     }`}>
-                      {progress === 100 ? (
+                      {isRestDay ? (
+                        <>
+                          <Shield className="w-4 h-4 md:w-5 md:h-5" />
+                          RECOVERY PROTOCOL
+                        </>
+                      ) : progress === 100 ? (
                         <>
                           <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
                           PROTOCOL COMPLETED
@@ -952,8 +974,10 @@ function App() {
                         </>
                       )}
                     </h2>
-                    <p className={`mt-1 text-xs md:text-sm ${progress === 100 ? 'text-on-surface' : 'text-on-error-container'}`}>
-                      {progress === 100 ? (
+                    <p className={`mt-1 text-xs md:text-sm ${isRestDay ? 'text-on-surface-variant' : progress === 100 ? 'text-on-surface' : 'text-on-error-container'}`}>
+                      {isRestDay ? (
+                        <>No active objectives. System in standby mode. Rank: {currentRank.name}.</>
+                      ) : progress === 100 ? (
                         <>Objectives secured. Rank: {currentRank.name}.</>
                       ) : (
                         <>Incomplete. Breach in <span className="font-mono font-bold">{timeLeftInDay}</span>. Rank: {currentRank.name}.</>
@@ -1022,114 +1046,130 @@ function App() {
 
                 {/* Workout Checklist */}
                 <div className="lg:col-span-2 space-y-4 md:space-y-6">
-                  {workout.some(item => !item.completed && getOverloadSuggestion(item.name)) && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-primary-container/5 border border-primary-container/30 p-4 flex items-start gap-4"
-                    >
-                      <div className="p-2 bg-primary-container/10">
-                        <TrendingUp className="w-5 h-5 text-primary-container" />
-                      </div>
-                      <div>
-                        <div className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-primary-container mb-1">System Recommendation: Progressive Overload</div>
-                        <p className="text-[10px] text-on-surface-variant uppercase leading-relaxed">
-                          Previous data detected. To maintain Rank progression, consider increasing intensity on highlighted exercises.
-                        </p>
-                      </div>
-                    </motion.div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-headline text-base md:text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-2 md:gap-3">
-                      <Bolt className="w-4 h-4 md:w-5 md:h-5" />
-                      Today's Workout
-                    </h3>
-                    <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant uppercase tracking-widest bg-surface-container-high px-2 md:px-3 py-1">
-                      Phase: Hypertrophy
+                  {isRestDay ? (
+                    <div className="flex flex-col items-center justify-center py-20 border border-dashed border-outline-variant/20 bg-surface-container-low/20">
+                      <Shield className="w-16 h-16 text-primary-container/20 mb-4" />
+                      <h3 className="font-headline text-lg font-black text-on-surface-variant uppercase tracking-widest">Rest Day Active</h3>
+                      <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2">No objectives assigned for this cycle.</p>
+                      <button 
+                        onClick={() => setActiveTab('Schedule')}
+                        className="mt-6 text-primary-container font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:underline"
+                      >
+                        Modify Schedule
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="space-y-3 md:space-y-4">
-                    <AnimatePresence mode="popLayout">
-                      {workout.map((item) => (
+                  ) : (
+                    <>
+                      {workout.some(item => !item.completed && getOverloadSuggestion(item.name)) && (
                         <motion.div 
-                          key={item.id}
-                          layout
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          className={`group p-3 md:p-5 flex flex-col md:flex-row items-center gap-3 md:gap-6 transition-all border-l-2 ${
-                            item.completed 
-                              ? 'bg-surface-container-low/50 opacity-60 border-primary-container' 
-                              : 'bg-surface-container-low hover:bg-surface-container-high border-transparent hover:border-primary-container'
-                          }`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-primary-container/5 border border-primary-container/30 p-4 flex items-start gap-4"
                         >
-                          <div className="flex-grow w-full md:w-auto">
-                            <div className={`font-headline font-bold uppercase tracking-tight text-sm md:text-lg flex flex-col gap-1 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
-                              <div className="flex items-center gap-2">
-                                {item.name}
-                                {!item.completed && getOverloadSuggestion(item.name) && (
-                                  <TrendingUp className="w-3 h-3 text-primary-container animate-pulse" />
-                                )}
-                              </div>
-                              {!item.completed && getOverloadSuggestion(item.name) && (
-                                <div className="bg-primary-container/10 border border-primary-container/20 p-2 mt-1">
-                                  <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1 flex items-center gap-1">
-                                    <Zap className="w-2 h-2" />
-                                    Progressive Overload Intel
-                                  </div>
-                                  <div className="text-[10px] text-on-surface uppercase leading-tight">
-                                    Target: <span className="text-primary-container font-bold">{getOverloadSuggestion(item.name)?.suggestion}</span>
-                                    <span className="text-on-surface-variant ml-2">(Previous: {getOverloadSuggestion(item.name)?.original})</span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant tracking-[0.1em] uppercase">Target: {item.target}</div>
+                          <div className="p-2 bg-primary-container/10">
+                            <TrendingUp className="w-5 h-5 text-primary-container" />
                           </div>
-
-                          <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6 w-full md:w-auto">
-                            <div className="flex flex-col items-center">
-                              <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>
-                              <input 
-                                type="text"
-                                value={item.weight}
-                                onChange={(e) => updateWorkoutItem(item.id, 'weight', e.target.value)}
-                                className="w-12 md:w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                              />
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>
-                              <input 
-                                type="number"
-                                value={item.reps}
-                                onChange={(e) => updateWorkoutItem(item.id, 'reps', parseInt(e.target.value) || 0)}
-                                className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                              />
-                            </div>
-                            <div className="flex flex-col items-center">
-                              <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
-                              <input 
-                                type="text"
-                                value={item.sets}
-                                onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
-                                className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                              />
-                            </div>
-                            <button 
-                              onClick={() => toggleComplete(item.id)}
-                              className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 transition-all ${
-                                item.completed 
-                                  ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
-                                  : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
-                              }`}
-                            >
-                              {item.completed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <Check className="w-5 h-5 md:w-6 md:h-6 text-primary-container" />}
-                            </button>
+                          <div>
+                            <div className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-primary-container mb-1">System Recommendation: Progressive Overload</div>
+                            <p className="text-[10px] text-on-surface-variant uppercase leading-relaxed">
+                              Previous data detected. To maintain Rank progression, consider increasing intensity on highlighted exercises.
+                            </p>
                           </div>
                         </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-headline text-base md:text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-2 md:gap-3">
+                          <Bolt className="w-4 h-4 md:w-5 md:h-5" />
+                          Today's Workout
+                        </h3>
+                        <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant uppercase tracking-widest bg-surface-container-high px-2 md:px-3 py-1">
+                          Phase: Hypertrophy
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 md:space-y-4">
+                        <AnimatePresence mode="popLayout">
+                          {workout.map((item) => (
+                            <motion.div 
+                              key={item.id}
+                              layout
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              className={`group p-3 md:p-5 flex flex-col md:flex-row items-center gap-3 md:gap-6 transition-all border-l-2 ${
+                                item.completed 
+                                  ? 'bg-surface-container-low/50 opacity-60 border-primary-container' 
+                                  : 'bg-surface-container-low hover:bg-surface-container-high border-transparent hover:border-primary-container'
+                              }`}
+                            >
+                              <div className="flex-grow w-full md:w-auto">
+                                <div className={`font-headline font-bold uppercase tracking-tight text-sm md:text-lg flex flex-col gap-1 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                                  <div className="flex items-center gap-2">
+                                    {item.name}
+                                    {!item.completed && getOverloadSuggestion(item.name) && (
+                                      <TrendingUp className="w-3 h-3 text-primary-container animate-pulse" />
+                                    )}
+                                  </div>
+                                  {!item.completed && getOverloadSuggestion(item.name) && (
+                                    <div className="bg-primary-container/10 border border-primary-container/20 p-2 mt-1">
+                                      <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1 flex items-center gap-1">
+                                        <Zap className="w-2 h-2" />
+                                        Progressive Overload Intel
+                                      </div>
+                                      <div className="text-[10px] text-on-surface uppercase leading-tight">
+                                        Target: <span className="text-primary-container font-bold">{getOverloadSuggestion(item.name)?.suggestion}</span>
+                                        <span className="text-on-surface-variant ml-2">(Previous: {getOverloadSuggestion(item.name)?.original})</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant tracking-[0.1em] uppercase">Target: {item.target}</div>
+                              </div>
+
+                              <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6 w-full md:w-auto">
+                                <div className="flex flex-col items-center">
+                                  <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>
+                                  <input 
+                                    type="text"
+                                    value={item.weight}
+                                    onChange={(e) => updateWorkoutItem(item.id, 'weight', e.target.value)}
+                                    className="w-12 md:w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                  />
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>
+                                  <input 
+                                    type="number"
+                                    value={item.reps}
+                                    onChange={(e) => updateWorkoutItem(item.id, 'reps', parseInt(e.target.value) || 0)}
+                                    className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                  />
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
+                                  <input 
+                                    type="text"
+                                    value={item.sets}
+                                    onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
+                                    className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => toggleComplete(item.id)}
+                                  className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 transition-all ${
+                                    item.completed 
+                                      ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
+                                      : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
+                                  }`}
+                                >
+                                  {item.completed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <Check className="w-5 h-5 md:w-6 md:h-6 text-primary-container" />}
+                                </button>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Sidebar Modules */}
