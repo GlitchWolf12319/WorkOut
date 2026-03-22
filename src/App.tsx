@@ -315,6 +315,9 @@ export default function App() {
   };
 
   const toggleComplete = (id: string) => {
+    if (!isTimerActive) {
+      setIsTimerActive(true);
+    }
     setWorkout(prev => prev.map(item => {
       if (item.id === id) {
         const newCompleted = !item.completed;
@@ -473,8 +476,10 @@ export default function App() {
     const totalVolume = archive.reduce((acc, entry) => {
       if (!entry.exercises) return acc;
       return acc + entry.exercises.reduce((exAcc, ex) => {
+        if (!ex.completed) return exAcc;
         const weight = parseFloat(ex.weight.replace(/[^0-9.]/g, '')) || 0;
-        return exAcc + (weight * ex.reps * ex.sets);
+        const sets = parseInt(ex.sets) || 0;
+        return exAcc + (weight * ex.reps * sets);
       }, 0);
     }, 0);
 
@@ -493,7 +498,7 @@ export default function App() {
     <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
       {/* Top Navigation */}
       <nav className="fixed top-0 w-full z-50 border-b border-primary-container/15 bg-background/80 backdrop-blur-xl flex justify-between items-center px-8 py-4">
-        <div className="text-2xl font-black tracking-widest text-primary-container glow-text-primary font-headline uppercase">
+        <div className="text-lg md:text-2xl font-black tracking-widest text-primary-container glow-text-primary font-headline uppercase">
           THE SOVEREIGN PROTOCOL
         </div>
         <div className="hidden md:flex space-x-8 font-headline uppercase text-[10px] tracking-[0.2em]">
@@ -564,15 +569,15 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="md:ml-64 pt-24 pb-12 px-8">
-        <div className="max-w-6xl mx-auto space-y-12">
+      <main className="md:ml-64 pt-20 md:pt-24 pb-32 md:pb-12 px-4 md:px-8">
+        <div className="max-w-6xl mx-auto space-y-4 md:space-y-12">
           {activeTab === 'Daily Quest' && (
             <>
               {/* Alert Banner */}
               <motion.section 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`relative p-6 overflow-hidden border-l-4 ${
+                className={`relative p-4 md:p-6 overflow-hidden border-l-4 ${
                   progress === 100 
                     ? 'bg-primary-container/10 border-primary-container' 
                     : 'bg-error-container/20 border-error'
@@ -580,33 +585,33 @@ export default function App() {
               >
                 <div className="absolute top-0 right-0 p-2 opacity-5">
                   {progress === 100 ? (
-                    <CheckCircle2 className="w-32 h-32 text-primary-container" />
+                    <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-primary-container" />
                   ) : (
-                    <AlertTriangle className="w-32 h-32 text-error" />
+                    <AlertTriangle className="w-24 h-24 md:w-32 md:h-32 text-error" />
                   )}
                 </div>
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
                   <div>
-                    <h2 className={`font-headline font-black text-xl tracking-tighter uppercase flex items-center gap-2 ${
+                    <h2 className={`font-headline font-black text-lg md:text-xl tracking-tighter uppercase flex items-center gap-2 ${
                       progress === 100 ? 'text-primary-container' : 'text-error'
                     }`}>
                       {progress === 100 ? (
                         <>
-                          <CheckCircle2 className="w-5 h-5" />
+                          <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
                           PROTOCOL COMPLETED
                         </>
                       ) : (
                         <>
-                          <AlertTriangle className="w-5 h-5" />
-                          PROTOCOL BREACH DETECTED
+                          <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
+                          PROTOCOL BREACH
                         </>
                       )}
                     </h2>
-                    <p className={`mt-1 text-sm ${progress === 100 ? 'text-on-surface' : 'text-on-error-container'}`}>
+                    <p className={`mt-1 text-xs md:text-sm ${progress === 100 ? 'text-on-surface' : 'text-on-error-container'}`}>
                       {progress === 100 ? (
-                        <>All objectives secured. Daily Quest sequence finalized. Rank: {currentRank.name} status maintained.</>
+                        <>Objectives secured. Rank: {currentRank.name}.</>
                       ) : (
-                        <>Daily Quest sequence incomplete. System degradation imminent in <span className="font-mono font-bold">{timeLeftInDay}</span>. Initialize workout to maintain Rank: {currentRank.name}.</>
+                        <>Incomplete. Breach in <span className="font-mono font-bold">{timeLeftInDay}</span>. Rank: {currentRank.name}.</>
                       )}
                     </p>
                   </div>
@@ -614,16 +619,16 @@ export default function App() {
               </motion.section>
 
               {/* Dashboard Header */}
-              <div className="flex flex-col md:flex-row justify-between items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-4 md:pb-6 gap-4 md:gap-6">
                 <div>
-                  <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Current Operation</span>
-                  <h1 className="font-headline text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">The Daily Quest</h1>
+                  <span className="font-label text-primary-container text-[8px] md:text-[10px] tracking-[0.4em] uppercase">Current Operation</span>
+                  <h1 className="font-headline text-2xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-1 md:mt-2">The Daily Quest</h1>
                 </div>
-                <div className="text-right">
-                  <div className="font-label text-on-surface-variant text-[10px] tracking-[0.2em] uppercase mb-2">Completion Status</div>
-                  <div className="flex items-center gap-4">
-                    <span className="font-headline text-3xl font-bold text-primary-container">{progress}%</span>
-                    <div className="w-64 h-3 bg-surface-container-highest relative overflow-hidden">
+                <div className="w-full md:w-auto text-left md:text-right">
+                  <div className="font-label text-on-surface-variant text-[8px] md:text-[10px] tracking-[0.2em] uppercase mb-1 md:mb-2">Completion Status</div>
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <span className="font-headline text-xl md:text-3xl font-bold text-primary-container">{progress}%</span>
+                    <div className="flex-grow md:w-64 h-2 md:h-3 bg-surface-container-highest relative overflow-hidden">
                       <div className="absolute inset-0 scanline-overlay z-10"></div>
                       <motion.div 
                         initial={{ width: 0 }}
@@ -636,20 +641,70 @@ export default function App() {
               </div>
 
               {/* Bento Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+                {/* Rank Progress Card (Mobile First) */}
+                <div className="lg:hidden">
+                  <div className="bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-4 relative group overflow-hidden">
+                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+                      <BarChart3 className="w-32 h-32 text-primary-container" />
+                    </div>
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-[0.2em]">Rank Standing</div>
+                          <div className="font-headline text-2xl font-black text-primary-container glow-text-primary">{currentRank.name}</div>
+                        </div>
+                        <div className="bg-primary-container/10 px-2 py-1 border border-primary-container/20">
+                          <span className="font-mono text-[8px] text-primary-container">{currentRank.title}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between font-label text-[7px] text-on-surface-variant uppercase">
+                          <span>{nextRank ? `XP to Rank ${nextRank.name}` : 'MAX RANK'}</span>
+                          <span>{exp.toLocaleString()} / {nextRank ? nextRank.min.toLocaleString() : 'MAX'}</span>
+                        </div>
+                        <div className="w-full h-1 bg-surface-container-highest">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${rankProgress}%` }}
+                            className="h-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.6)]" 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Workout Checklist */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-2 space-y-4 md:space-y-6">
+                  {workout.some(item => !item.completed && getOverloadSuggestion(item.name)) && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-primary-container/5 border border-primary-container/30 p-4 flex items-start gap-4"
+                    >
+                      <div className="p-2 bg-primary-container/10">
+                        <TrendingUp className="w-5 h-5 text-primary-container" />
+                      </div>
+                      <div>
+                        <div className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-primary-container mb-1">System Recommendation: Progressive Overload</div>
+                        <p className="text-[10px] text-on-surface-variant uppercase leading-relaxed">
+                          Previous data detected. To maintain Rank progression, consider increasing intensity on highlighted exercises.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
                   <div className="flex items-center justify-between">
-                    <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-3">
-                      <Bolt className="w-5 h-5" />
+                    <h3 className="font-headline text-base md:text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-2 md:gap-3">
+                      <Bolt className="w-4 h-4 md:w-5 md:h-5" />
                       Today's Workout
                     </h3>
-                    <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest bg-surface-container-high px-3 py-1">
+                    <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant uppercase tracking-widest bg-surface-container-high px-2 md:px-3 py-1">
                       Phase: Hypertrophy
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3 md:space-y-4">
                     <AnimatePresence mode="popLayout">
                       {workout.map((item) => (
                         <motion.div 
@@ -657,71 +712,75 @@ export default function App() {
                           layout
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
-                          className={`group p-5 flex flex-col md:flex-row items-center gap-6 transition-all border-l-2 ${
+                          className={`group p-3 md:p-5 flex flex-col md:flex-row items-center gap-3 md:gap-6 transition-all border-l-2 ${
                             item.completed 
                               ? 'bg-surface-container-low/50 opacity-60 border-primary-container' 
                               : 'bg-surface-container-low hover:bg-surface-container-high border-transparent hover:border-primary-container'
                           }`}
                         >
                           <div className="flex-grow w-full md:w-auto">
-                            <div className={`font-headline font-bold uppercase tracking-tight text-lg flex items-center gap-2 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
-                              {item.name}
+                            <div className={`font-headline font-bold uppercase tracking-tight text-sm md:text-lg flex flex-col gap-1 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                              <div className="flex items-center gap-2">
+                                {item.name}
+                                {!item.completed && getOverloadSuggestion(item.name) && (
+                                  <TrendingUp className="w-3 h-3 text-primary-container animate-pulse" />
+                                )}
+                              </div>
                               {!item.completed && getOverloadSuggestion(item.name) && (
-                                <div className="group/overload relative">
-                                  <TrendingUp className="w-3 h-3 text-primary-container animate-pulse cursor-help" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-surface-container-highest border border-primary-container/30 shadow-xl opacity-0 group-hover/overload:opacity-100 transition-opacity pointer-events-none z-50">
-                                    <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1">Progressive Overload</div>
-                                    <div className="text-[10px] text-on-surface uppercase">
-                                      Suggest {getOverloadSuggestion(item.name)?.suggestion} 
-                                      <span className="text-on-surface-variant ml-1">(Prev: {getOverloadSuggestion(item.name)?.original})</span>
-                                    </div>
+                                <div className="bg-primary-container/10 border border-primary-container/20 p-2 mt-1">
+                                  <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <Zap className="w-2 h-2" />
+                                    Progressive Overload Intel
+                                  </div>
+                                  <div className="text-[10px] text-on-surface uppercase leading-tight">
+                                    Target: <span className="text-primary-container font-bold">{getOverloadSuggestion(item.name)?.suggestion}</span>
+                                    <span className="text-on-surface-variant ml-2">(Previous: {getOverloadSuggestion(item.name)?.original})</span>
                                   </div>
                                 </div>
                               )}
                             </div>
-                            <div className="font-label text-[10px] text-on-surface-variant tracking-[0.1em] uppercase">Target: {item.target}</div>
+                            <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant tracking-[0.1em] uppercase">Target: {item.target}</div>
                           </div>
 
-                          <div className="flex items-center gap-6 w-full md:w-auto">
+                          <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6 w-full md:w-auto">
                             <div className="flex flex-col items-center">
-                              <span className="font-label text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>
+                              <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>
                               <input 
                                 type="text"
                                 value={item.weight}
                                 onChange={(e) => updateWorkoutItem(item.id, 'weight', e.target.value)}
-                                className="w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                className="w-12 md:w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
                               />
                             </div>
                             <div className="flex flex-col items-center">
-                              <span className="font-label text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>
+                              <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>
                               <input 
                                 type="number"
                                 value={item.reps}
                                 onChange={(e) => updateWorkoutItem(item.id, 'reps', parseInt(e.target.value) || 0)}
-                                className="w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
                               />
                             </div>
                             <div className="flex flex-col items-center">
-                              <span className="font-label text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
+                              <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
                               <input 
                                 type="text"
                                 value={item.sets}
                                 onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
-                                className="w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
                               />
                             </div>
+                            <button 
+                              onClick={() => toggleComplete(item.id)}
+                              className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 transition-all ${
+                                item.completed 
+                                  ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
+                                  : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
+                              }`}
+                            >
+                              {item.completed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <Check className="w-5 h-5 md:w-6 md:h-6 text-primary-container" />}
+                            </button>
                           </div>
-
-                          <button 
-                            onClick={() => toggleComplete(item.id)}
-                            className={`flex items-center justify-center w-12 h-12 transition-all ${
-                              item.completed 
-                                ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
-                                : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
-                            }`}
-                          >
-                            {item.completed ? <CheckCircle2 className="w-6 h-6" /> : <Check className="w-6 h-6 text-primary-container" />}
-                          </button>
                         </motion.div>
                       ))}
                     </AnimatePresence>
@@ -729,9 +788,9 @@ export default function App() {
                 </div>
 
                 {/* Sidebar Modules */}
-                <div className="space-y-8">
+                <div className="space-y-4 md:space-y-8">
                   {/* Status HUD */}
-                  <div className="bg-surface-container-low/30 border border-outline-variant/10 p-6 space-y-4">
+                  <div className="hidden md:block bg-surface-container-low/30 border border-outline-variant/10 p-4 md:p-6 space-y-3 md:space-y-4">
                     {[
                       { label: 'Protocol Duration', value: formatTime(timer), color: 'text-primary-container', icon: Terminal },
                       { label: 'System Latency', value: '12ms', color: 'text-primary-container' },
@@ -753,8 +812,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Rank Progress Card */}
-                  <div className="bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-6 relative group overflow-hidden">
+                  {/* Rank Progress Card (Desktop) */}
+                  <div className="hidden lg:block bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-4 md:p-6 relative group overflow-hidden">
                     <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
                       <BarChart3 className="w-32 h-32 text-primary-container" />
                     </div>
@@ -785,20 +844,20 @@ export default function App() {
                   </div>
 
                   {/* Pending Intel */}
-                  <div className="space-y-4">
-                    <h4 className="font-headline text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant px-2">Pending Intel</h4>
-                    <div className="bg-surface-container-low p-4 flex gap-4 items-center border border-outline-variant/10">
+                  <div className="hidden md:block space-y-3 md:space-y-4">
+                    <h4 className="font-headline text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant px-2">Pending Intel</h4>
+                    <div className="bg-surface-container-low p-3 md:p-4 flex gap-3 md:gap-4 items-center border border-outline-variant/10">
                       <div className="p-2 bg-surface-container-high border border-outline-variant/20">
-                        <Lock className="w-4 h-4 text-on-surface-variant" />
+                        <Lock className="w-3 h-3 md:w-4 md:h-4 text-on-surface-variant" />
                       </div>
                       <div>
-                        <div className="font-headline text-[10px] font-bold uppercase tracking-tight">Legionnaire Protocol</div>
-                        <div className="text-[8px] text-on-surface-variant uppercase tracking-wider">Unlocks after 5 consecutive Quests.</div>
+                        <div className="font-headline text-[9px] md:text-[10px] font-bold uppercase tracking-tight">Legionnaire Protocol</div>
+                        <div className="text-[7px] md:text-[8px] text-on-surface-variant uppercase tracking-wider">Unlocks after 5 consecutive Quests.</div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-col md:flex-row gap-4 mt-8">
+                  <div className="hidden md:flex flex-col md:flex-row gap-4 mt-8">
                     <button 
                       onClick={logWorkout}
                       disabled={progress === 0 || progress === 100}
@@ -832,10 +891,10 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
                 <div>
                   <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Protocol Planning</span>
-                  <h1 className="font-headline text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Training Schedule</h1>
+                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Training Schedule</h1>
                 </div>
               </div>
 
@@ -947,16 +1006,16 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
                 <div>
                   <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Historical Data</span>
-                  <h1 className="font-headline text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Protocol Archive</h1>
+                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Protocol Archive</h1>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 w-full md:w-auto">
                   {archive.length > 0 && (
                     <button 
                       onClick={() => setShowPurgeModal(true)}
-                      className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-error hover:text-error/80 transition-colors border border-error/20 px-4 py-2 bg-error/5 hover:bg-error/10"
+                      className="w-full md:w-auto font-headline text-[10px] font-black uppercase tracking-[0.2em] text-error hover:text-error/80 transition-colors border border-error/20 px-4 py-2 bg-error/5 hover:bg-error/10"
                     >
                       Purge Archive Data
                     </button>
@@ -966,36 +1025,36 @@ export default function App() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Calendar Grid */}
-                <div className="lg:col-span-2 bg-surface-container-low p-6 border border-outline-variant/10">
-                  <div className="flex justify-between items-center mb-8">
-                    <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-3">
-                      <History className="w-5 h-5" />
+                <div className="lg:col-span-2 bg-surface-container-low p-4 md:p-6 border border-outline-variant/10">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 md:mb-8 gap-3 md:gap-4">
+                    <h3 className="font-headline text-sm md:text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-2 md:gap-3">
+                      <History className="w-4 h-4 md:w-5 md:h-5" />
                       Daily Quest History
                     </h3>
-                    <div className="flex gap-4 items-center">
-                      <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mr-4">
+                    <div className="flex flex-wrap gap-2 md:gap-4 items-center w-full md:w-auto justify-between">
+                      <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant uppercase tracking-widest">
                         {format(currentMonth, 'MMMM yyyy')}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1 md:gap-2">
                         <button 
                           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                          className="p-2 hover:bg-surface-container-high text-on-surface-variant"
+                          className="p-1.5 md:p-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-outline-variant/10"
                         >
-                          <ChevronLeft className="w-4 h-4" />
+                          <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
                         <button 
                           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                          className="p-2 hover:bg-surface-container-high text-on-surface-variant"
+                          className="p-1.5 md:p-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-outline-variant/10"
                         >
-                          <ChevronRight className="w-4 h-4" />
+                          <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-7 gap-px bg-outline-variant/10 border border-outline-variant/10">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                      <div key={d} className="bg-surface-container-low p-2 text-center font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, idx) => (
+                      <div key={idx} className="bg-surface-container-low p-1 md:p-2 text-center font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
                         {d}
                       </div>
                     ))}
@@ -1016,19 +1075,19 @@ export default function App() {
                           <button
                             key={i}
                             onClick={() => setSelectedArchiveDate(day)}
-                            className={`relative h-24 p-2 transition-all hover:z-10 ${
+                            className={`relative h-14 md:h-24 p-1 md:p-2 transition-all hover:z-10 ${
                               isCurrentMonth ? 'bg-surface-container-low' : 'bg-surface-container-low/30 opacity-30'
                             } ${isSelected ? 'ring-2 ring-primary-container ring-inset z-10' : ''} border-r border-b border-outline-variant/10`}
                           >
-                            <span className={`font-mono text-[10px] ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
+                            <span className={`font-mono text-[8px] md:text-[10px] ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
                               {format(day, 'd')}
                             </span>
                             
-                            <div className="mt-2 space-y-1">
+                            <div className="mt-1 md:mt-2 space-y-0.5 md:space-y-1">
                               {dayEntries.map(entry => (
                                 <div 
                                   key={entry.id}
-                                  className={`h-1.5 w-full ${
+                                  className={`h-1 md:h-1.5 w-full ${
                                     entry.type === 'COMPLETED' ? 'bg-primary-container' : 
                                     entry.type === 'INCOMPLETE' ? 'bg-warning' : 'bg-error'
                                   } opacity-80`}
@@ -1044,7 +1103,7 @@ export default function App() {
 
                 {/* Day Details */}
                 <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-surface-container-low p-6 border border-outline-variant/10 h-full">
+                  <div className="bg-surface-container-low p-4 md:p-6 border border-outline-variant/10 h-full">
                     <h4 className="font-headline text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant mb-6">
                       {selectedArchiveDate ? format(selectedArchiveDate, 'EEEE, MMMM do') : 'Select a date to view intel'}
                     </h4>
@@ -1111,10 +1170,10 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
                 <div>
                   <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Biometric Analysis</span>
-                  <h1 className="font-headline text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Operator Stats</h1>
+                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Operator Stats</h1>
                 </div>
               </div>
 
@@ -1130,41 +1189,95 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="bg-surface-container-low p-8 border border-outline-variant/10">
-                <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container mb-8">Performance Matrix</h3>
-                <div className="h-64 flex items-end justify-between gap-2">
-                  {Array.from({ length: 7 }).map((_, i) => {
-                    const date = new Date();
-                    date.setDate(date.getDate() - (6 - i));
-                    const dateStr = date.toISOString().split('T')[0];
-                    const dayEntry = archive.find(e => e.date === dateStr);
-                    const height = dayEntry ? (
-                      dayEntry.type === 'COMPLETED' ? 100 : 
-                      dayEntry.type === 'INCOMPLETE' ? (dayEntry.progress || 50) : 10
-                    ) : 0;
-                    const dayLabel = ['S', 'M', 'T', 'W', 'T', 'F', 'S'][date.getDay()];
-                    
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-4">
-                        <div className="w-full bg-surface-container-high relative group h-full flex items-end">
-                          <motion.div 
-                            initial={{ height: 0 }}
-                            animate={{ height: `${height}%` }}
-                            className={`w-full border-t-2 transition-all ${
-                              dayEntry?.type === 'COMPLETED' 
-                                ? 'bg-primary-container/20 border-primary-container group-hover:bg-primary-container/40' 
-                                : dayEntry?.type === 'INCOMPLETE'
-                                ? 'bg-amber-500/20 border-amber-500 group-hover:bg-amber-500/40'
-                                : dayEntry?.type === 'PUNISHMENT'
-                                ? 'bg-error/20 border-error group-hover:bg-error/40'
-                                : 'bg-on-surface-variant/5 border-on-surface-variant/20'
-                            }`}
-                          />
-                        </div>
-                        <span className="font-label text-[8px] text-on-surface-variant uppercase">{dayLabel}</span>
+              <div className="bg-surface-container-low p-6 md:p-8 border border-outline-variant/10">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                  <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container">Performance Matrix</h3>
+                  <div className="flex gap-4">
+                    {[
+                      { label: 'Completed', color: 'bg-primary-container' },
+                      { label: 'Incomplete', color: 'bg-amber-500' },
+                      { label: 'Breach', color: 'bg-error' },
+                    ].map(item => (
+                      <div key={item.label} className="flex items-center gap-2">
+                        <div className={`w-2 h-2 ${item.color}`} />
+                        <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">{item.label}</span>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+                </div>
+
+                <div className="relative h-64 flex gap-4">
+                  {/* Y-Axis */}
+                  <div className="flex flex-col justify-between text-[8px] font-mono text-on-surface-variant/40 uppercase py-1 h-full border-r border-outline-variant/10 pr-2">
+                    <span>100%</span>
+                    <span>75%</span>
+                    <span>50%</span>
+                    <span>25%</span>
+                    <span>0%</span>
+                  </div>
+
+                  {/* Grid Lines Overlay */}
+                  <div className="absolute inset-0 left-10 right-0 pointer-events-none">
+                    {[0, 25, 50, 75, 100].map(tick => (
+                      <div 
+                        key={tick} 
+                        className="absolute w-full border-t border-outline-variant/5" 
+                        style={{ bottom: `${tick}%` }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Bars Container */}
+                  <div className="flex-grow flex items-end justify-between gap-2 md:gap-4 h-full relative z-10">
+                    {Array.from({ length: 7 }).map((_, i) => {
+                      const date = new Date();
+                      date.setDate(date.getDate() - (6 - i));
+                      const dateStr = date.toISOString().split('T')[0];
+                      const dayEntry = archive.find(e => e.date === dateStr);
+                      const height = dayEntry ? (
+                        dayEntry.type === 'COMPLETED' ? 100 : 
+                        dayEntry.type === 'INCOMPLETE' ? (dayEntry.progress || 50) : 10
+                      ) : 0;
+                      const dayLabel = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][date.getDay()];
+                      const formattedDate = format(date, 'MMM dd');
+                      
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-4 h-full">
+                          <div className="w-full bg-surface-container-high/30 relative group h-full flex items-end">
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-24 p-2 bg-surface-container-highest border border-primary-container/30 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                              <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1">{formattedDate}</div>
+                              <div className="text-[10px] text-on-surface uppercase font-bold">
+                                {dayEntry ? `${height}%` : 'NO INTEL'}
+                              </div>
+                              <div className="text-[7px] text-on-surface-variant uppercase mt-1">
+                                {dayEntry?.type || 'IDLE'}
+                              </div>
+                            </div>
+
+                            <motion.div 
+                              initial={{ height: 0 }}
+                              animate={{ height: `${height}%` }}
+                              className={`w-full border-t-2 transition-all relative ${
+                                dayEntry?.type === 'COMPLETED' 
+                                  ? 'bg-primary-container/20 border-primary-container group-hover:bg-primary-container/40' 
+                                  : dayEntry?.type === 'INCOMPLETE'
+                                  ? 'bg-amber-500/20 border-amber-500 group-hover:bg-amber-500/40'
+                                  : dayEntry?.type === 'PUNISHMENT'
+                                  ? 'bg-error/20 border-error group-hover:bg-error/40'
+                                  : 'bg-on-surface-variant/5 border-on-surface-variant/20'
+                              }`}
+                            >
+                              {height > 0 && (
+                                <div className="absolute inset-0 scanline-overlay opacity-20"></div>
+                              )}
+                            </motion.div>
+                          </div>
+                          <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">{dayLabel}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -1218,17 +1331,21 @@ export default function App() {
       </AnimatePresence>
 
       {/* Mobile Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-low border-t border-outline-variant/20 flex justify-around p-4 z-50">
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-low/90 backdrop-blur-lg border-t border-primary-container/10 flex justify-around p-4 z-50">
         {[
-          { icon: Bolt, label: 'Quest', active: true },
-          { icon: History, label: 'Archive' },
-          { icon: BarChart3, label: 'Stats' },
-          { icon: Settings, label: 'Config' },
+          { icon: Bolt, label: 'Quest', tab: 'Daily Quest' },
+          { icon: History, label: 'Archive', tab: 'Workout Archive' },
+          { icon: CalendarIcon, label: 'Schedule', tab: 'Schedule' },
+          { icon: BarChart3, label: 'Stats', tab: 'User Stats' },
         ].map((item) => (
-          <div key={item.label} className={`flex flex-col items-center ${item.active ? 'text-primary-container' : 'text-on-surface-variant'}`}>
-            <item.icon className="w-5 h-5" />
-            <span className="text-[8px] uppercase tracking-widest mt-1">{item.label}</span>
-          </div>
+          <button 
+            key={item.label} 
+            onClick={() => setActiveTab(item.tab)}
+            className={`flex flex-col items-center transition-all ${activeTab === item.tab ? 'text-primary-container scale-110' : 'text-on-surface-variant/50'}`}
+          >
+            <item.icon className={`w-5 h-5 ${activeTab === item.tab ? 'glow-primary' : ''}`} />
+            <span className="text-[7px] uppercase tracking-[0.2em] mt-1 font-headline font-bold">{item.label}</span>
+          </button>
         ))}
       </div>
     </div>
