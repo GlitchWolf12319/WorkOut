@@ -30,7 +30,8 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  Clock
+  Clock,
+  XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -168,6 +169,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 
 
+interface WorkoutSet {
+  weight: string;
+  reps: number;
+}
+
 interface WorkoutItem {
   id: string;
   name: string;
@@ -175,7 +181,9 @@ interface WorkoutItem {
   weight: string;
   reps: number;
   sets: string;
+  setData?: WorkoutSet[];
   completed: boolean;
+  isDeload?: boolean;
 }
 
 interface ScheduleDay {
@@ -248,6 +256,78 @@ function App() {
     const saved = localStorage.getItem('sovereign_exp');
     return saved ? parseInt(saved) : 0;
   });
+  const [programDuration, setProgramDuration] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_program_duration');
+    return saved ? parseInt(saved) : 4;
+  });
+  const [programStartDate, setProgramStartDate] = useState<string>(() => {
+    const saved = localStorage.getItem('sovereign_program_start_date');
+    return saved ? saved : new Date().toISOString().split('T')[0];
+  });
+  const [isDeloadEnabled, setIsDeloadEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('sovereign_deload_enabled');
+    return saved === 'true';
+  });
+
+  const getDeloadStatus = useCallback((date: Date = new Date()) => {
+    if (!isDeloadEnabled) return { isDeloadWeek: false, currentWeek: 0, weekInCycle: 0, isActiveProgram: false };
+    
+    const start = new Date(programStartDate);
+    start.setHours(0, 0, 0, 0);
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = checkDate.getTime() - start.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const currentWeek = Math.floor(diffDays / 7) + 1;
+    
+    if (currentWeek < 1) return { isDeloadWeek: false, currentWeek, weekInCycle: 0, isActiveProgram: false };
+
+    const cycleLength = programDuration + 1;
+    const weekInCycle = ((currentWeek - 1) % cycleLength) + 1;
+    const isDeloadWeek = weekInCycle === cycleLength;
+    
+    return { isDeloadWeek, currentWeek, weekInCycle, isActiveProgram: true };
+  }, [isDeloadEnabled, programStartDate, programDuration]);
+
+  const applyDeloadIfNecessary = useCallback((exercises: WorkoutItem[], date: Date = new Date()) => {
+    const { isDeloadWeek } = getDeloadStatus(date);
+    if (!isDeloadWeek) return exercises.map(ex => ({ ...ex, isDeload: false }));
+
+    return exercises.map(ex => {
+      const numSets = parseInt(ex.sets) || 1;
+      const deloadSets = Math.max(1, numSets - 1);
+      const deloadReps = Math.max(1, Math.floor(ex.reps * 0.6));
+      
+      let deloadWeight = ex.weight;
+      const numericWeight = parseFloat(ex.weight.replace(/[^0-9.]/g, ''));
+      if (!isNaN(numericWeight)) {
+        const unit = ex.weight.replace(/[0-9.]/g, '') || 'kg';
+        deloadWeight = `${Math.round(numericWeight * 0.6)}${unit}`;
+      }
+
+      const currentSetData = ex.setData || Array.from({ length: numSets }, () => ({ weight: ex.weight, reps: ex.reps }));
+      const deloadSetData = currentSetData
+        .slice(0, deloadSets)
+        .map(s => {
+          const sWeight = parseFloat(s.weight.replace(/[^0-9.]/g, ''));
+          const sUnit = s.weight.replace(/[0-9.]/g, '') || 'kg';
+          return {
+            weight: isNaN(sWeight) ? s.weight : `${Math.round(sWeight * 0.6)}${sUnit}`,
+            reps: Math.max(1, Math.floor(s.reps * 0.6))
+          };
+        });
+
+      return {
+        ...ex,
+        weight: deloadWeight,
+        reps: deloadReps,
+        sets: deloadSets.toString(),
+        setData: deloadSetData,
+        isDeload: true
+      };
+    });
+  }, [getDeloadStatus]);
   const [lastChecked, setLastChecked] = useState<string | null>(() => {
     return localStorage.getItem('sovereign_last_checked');
   });
@@ -297,6 +377,9 @@ function App() {
         setSchedule(prev => JSON.stringify(prev) !== JSON.stringify(data.schedule) ? data.schedule : prev);
         setArchive(prev => JSON.stringify(prev) !== JSON.stringify(data.archive) ? data.archive : prev);
         setExp(prev => prev !== data.exp ? data.exp : prev);
+        setProgramDuration(prev => prev !== data.programDuration ? data.programDuration : prev);
+        setProgramStartDate(prev => prev !== data.programStartDate ? data.programStartDate : prev);
+        setIsDeloadEnabled(prev => prev !== data.isDeloadEnabled ? data.isDeloadEnabled : prev);
         setLastChecked(prev => prev !== data.lastChecked ? data.lastChecked : prev);
       } else {
         // First time user - initialize Firestore with local data or defaults
@@ -306,6 +389,9 @@ function App() {
           schedule,
           archive,
           exp,
+          programDuration,
+          programStartDate,
+          isDeloadEnabled,
           lastChecked,
           level: 1,
           updatedAt: new Date().toISOString()
@@ -339,10 +425,22 @@ function App() {
           schedule,
           archive,
           exp,
+          programDuration,
+          programStartDate,
+          isDeloadEnabled,
           lastChecked,
           level: Math.floor(exp / 1000) + 1,
           updatedAt: new Date().toISOString()
         }, { merge: true });
+        
+        localStorage.setItem('sovereign_workout', JSON.stringify(workout));
+        localStorage.setItem('sovereign_schedule', JSON.stringify(schedule));
+        localStorage.setItem('sovereign_archive', JSON.stringify(archive));
+        localStorage.setItem('sovereign_exp', exp.toString());
+        localStorage.setItem('sovereign_program_duration', programDuration.toString());
+        localStorage.setItem('sovereign_program_start_date', programStartDate);
+        localStorage.setItem('sovereign_deload_enabled', isDeloadEnabled.toString());
+        if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
       } catch (err) {
         console.error("Failed to save to Firestore", err);
       }
@@ -351,7 +449,7 @@ function App() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady]);
+  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, isDeloadEnabled]);
 
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -526,7 +624,7 @@ function App() {
         // Auto-fill Daily Quest
         const todaySchedule = schedule.find(s => s.day === currentDayName);
         if (todaySchedule) {
-          setWorkout(todaySchedule.exercises.map(ex => ({ ...ex, completed: false })));
+          setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
         } else {
           setWorkout([]);
         }
@@ -536,7 +634,7 @@ function App() {
       } else if (!lastChecked) {
         const todaySchedule = schedule.find(s => s.day === currentDayName);
         if (todaySchedule) {
-          setWorkout(todaySchedule.exercises.map(ex => ({ ...ex, completed: false })));
+          setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
         }
         setLastChecked(todayStr);
       }
@@ -566,11 +664,11 @@ function App() {
         if (toAdd.length === 0 && toRemove.length === 0) return prev;
 
         const filtered = prev.filter(ex => scheduleIds.includes(ex.id));
-        const added = toAdd.map(ex => ({ ...ex, completed: false }));
+        const added = applyDeloadIfNecessary(toAdd.map(ex => ({ ...ex, completed: false })));
         return [...filtered, ...added];
       });
     }
-  }, [schedule]);
+  }, [schedule, applyDeloadIfNecessary]);
 
   const logWorkout = useCallback(() => {
     const today = new Date();
@@ -650,8 +748,35 @@ function App() {
       return;
     }
     
-    // If re-initializing a completed workout, reset completion status
+    // If re-initializing a completed workout, reset completion status and revert XP/Archive
     if (progress === 100 && workout.length > 0) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayEntries = archive.filter(entry => entry.date === todayStr);
+      
+      let expToSubtract = 0;
+      
+      // Subtract XP from toggleComplete for each exercise that was completed
+      workout.forEach(ex => {
+        if (ex.completed) {
+          expToSubtract += 100;
+        }
+      });
+      
+      // Subtract XP from logWorkout for each entry found for today
+      if (todayEntries.length > 0) {
+        todayEntries.forEach(entry => {
+          if (entry.type === 'COMPLETED') expToSubtract += 500;
+          else if (entry.type === 'INCOMPLETE') expToSubtract -= 300;
+          // Note: PUNISHMENT is for missed days, shouldn't be for today
+        });
+        // Remove all entries for today from archive to allow fresh re-attempt
+        setArchive(prev => prev.filter(entry => entry.date !== todayStr));
+      }
+      
+      if (expToSubtract !== 0) {
+        setExp(prev => Math.max(0, prev - expToSubtract));
+      }
+      
       setWorkout(prev => prev.map(ex => ({ ...ex, completed: false })));
     }
 
@@ -675,8 +800,39 @@ function App() {
     setExp(prev => prev + expChange);
   };
 
-  const updateWorkoutItem = (id: string, field: keyof WorkoutItem, value: string | number) => {
-    setWorkout(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
+  const updateWorkoutItem = (id: string, field: keyof WorkoutItem, value: any) => {
+    setWorkout(prev => prev.map(i => {
+      if (i.id === id) {
+        const updated = { ...i, [field]: value };
+        if (field === 'sets') {
+          const numSets = parseInt(value as string) || 1;
+          const currentSetData = i.setData || [{ weight: i.weight, reps: i.reps }];
+          if (numSets > currentSetData.length) {
+            const lastSet = currentSetData[currentSetData.length - 1] || { weight: i.weight, reps: i.reps };
+            const newSets = Array.from({ length: numSets - currentSetData.length }, () => ({ ...lastSet }));
+            updated.setData = [...currentSetData, ...newSets];
+          } else if (numSets < currentSetData.length) {
+            updated.setData = currentSetData.slice(0, numSets);
+          } else {
+            updated.setData = currentSetData;
+          }
+        }
+        return updated;
+      }
+      return i;
+    }));
+  };
+
+  const updateWorkoutSet = (exerciseId: string, setIndex: number, field: keyof WorkoutSet, value: string | number) => {
+    setWorkout(prev => prev.map(i => {
+      if (i.id === exerciseId) {
+        const currentSetData = i.setData || Array.from({ length: parseInt(i.sets) || 1 }, () => ({ weight: i.weight, reps: i.reps }));
+        const newSetData = [...currentSetData];
+        newSetData[setIndex] = { ...newSetData[setIndex], [field]: value };
+        return { ...i, setData: newSetData };
+      }
+      return i;
+    }));
   };
 
   const getOverloadSuggestion = (exerciseName: string) => {
@@ -719,9 +875,16 @@ function App() {
   const addExerciseToSchedule = () => {
     if (!newExercise.name) return;
     
+    const numSets = parseInt(newExercise.sets) || 1;
+    const setData: WorkoutSet[] = Array.from({ length: numSets }, () => ({
+      weight: newExercise.weight,
+      reps: newExercise.reps
+    }));
+
     const exercise: WorkoutItem = {
       id: Math.random().toString(36).substr(2, 9),
       ...newExercise,
+      setData,
       completed: false
     };
 
@@ -795,25 +958,30 @@ function App() {
   };
 
   const stats = useMemo(() => {
-    if (archive.length === 0) {
+    const selectedDateStr = selectedArchiveDate ? format(selectedArchiveDate, 'yyyy-MM-dd') : null;
+    const filteredArchive = selectedDateStr 
+      ? archive.filter(e => e.date === selectedDateStr)
+      : archive;
+
+    if (filteredArchive.length === 0) {
       return [
-        { label: 'Protocol Completion', value: '0%', icon: Activity, color: 'text-primary-container' },
-        { label: 'Total Volume', value: '0 KG', icon: Zap, color: 'text-primary-container' },
-        { label: 'Active Streak', value: '0 DAYS', icon: Shield, color: 'text-primary-container' },
-        { label: 'Rank Status', value: 'RECRUIT', icon: Target, color: 'text-primary-container' },
+        { label: selectedDateStr ? 'Daily Completion' : 'Protocol Completion', value: '0%', icon: Activity, color: 'text-primary-container' },
+        { label: selectedDateStr ? 'Daily Volume' : 'Total Volume', value: '0 KG', icon: Zap, color: 'text-primary-container' },
+        { label: 'Active Streak', value: `${calculateStreak()} DAYS`, icon: Shield, color: 'text-primary-container' },
+        { label: 'Rank Status', value: currentRank.name, icon: Target, color: 'text-primary-container' },
       ];
     }
 
     // Completion Rate
-    const totalProgress = archive.reduce((acc, entry) => {
+    const totalProgress = filteredArchive.reduce((acc, entry) => {
       if (entry.type === 'COMPLETED') return acc + 100;
       if (entry.type === 'INCOMPLETE') return acc + (entry.progress || 0);
       return acc;
     }, 0);
-    const avgCompletion = Math.round(totalProgress / archive.length);
+    const avgCompletion = Math.round(totalProgress / filteredArchive.length);
 
     // Total Volume
-    const totalVolume = archive.reduce((acc, entry) => {
+    const totalVolume = filteredArchive.reduce((acc, entry) => {
       if (!entry.exercises) return acc;
       return acc + entry.exercises.reduce((exAcc, ex) => {
         if (!ex.completed) return exAcc;
@@ -827,12 +995,12 @@ function App() {
     const rankStatus = currentRank.name;
 
     return [
-      { label: 'Protocol Completion', value: `${avgCompletion}%`, icon: Activity, color: 'text-primary-container' },
-      { label: 'Total Volume', value: `${totalVolume.toLocaleString()} KG`, icon: Zap, color: 'text-primary-container' },
+      { label: selectedDateStr ? 'Daily Completion' : 'Protocol Completion', value: `${avgCompletion}%`, icon: Activity, color: 'text-primary-container' },
+      { label: selectedDateStr ? 'Daily Volume' : 'Total Volume', value: `${totalVolume.toLocaleString()} KG`, icon: Zap, color: 'text-primary-container' },
       { label: 'Active Streak', value: `${calculateStreak()} DAYS`, icon: Shield, color: 'text-primary-container' },
       { label: 'Rank Status', value: rankStatus, icon: Target, color: 'text-primary-container' },
     ];
-  }, [archive, currentRank]);
+  }, [archive, currentRank, selectedArchiveDate]);
 
   return (
     <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
@@ -1002,6 +1170,11 @@ function App() {
                           <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
                           PROTOCOL BREACH
                         </>
+                      )}
+                      {getDeloadStatus().isDeloadWeek && !isRestDay && (
+                        <span className="bg-emerald-500/20 text-emerald-500 text-[8px] px-2 py-0.5 border border-emerald-500/30 tracking-[0.2em] ml-2">
+                          DELOAD ACTIVE
+                        </span>
                       )}
                     </h2>
                     <p className={`mt-1 text-xs md:text-sm ${isRestDay ? 'text-on-surface-variant' : progress === 100 ? 'text-on-surface' : 'text-on-error-container'}`}>
@@ -1189,44 +1362,54 @@ function App() {
                                 <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant tracking-[0.1em] uppercase">Target: {item.target}</div>
                               </div>
 
-                              <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6 w-full md:w-auto">
-                                <div className="flex flex-col items-center">
-                                  <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>
-                                  <input 
-                                    type="text"
-                                    value={item.weight}
-                                    onChange={(e) => updateWorkoutItem(item.id, 'weight', e.target.value)}
-                                    className="w-12 md:w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                                  />
+                              <div className="flex flex-col md:flex-row items-center justify-between md:justify-start gap-4 md:gap-6 w-full md:w-auto">
+                                <div className="flex flex-col gap-2 w-full md:w-auto">
+                                  {(item.setData || Array.from({ length: parseInt(item.sets) || 1 }, () => ({ weight: item.weight, reps: item.reps }))).map((set, idx) => (
+                                    <div key={idx} className="flex items-center gap-3 md:gap-4">
+                                      <span className="font-mono text-[8px] text-on-surface-variant w-4">#{idx + 1}</span>
+                                      <div className="flex flex-col items-center">
+                                        {idx === 0 && <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>}
+                                        <input 
+                                          type="text"
+                                          value={set.weight}
+                                          onChange={(e) => updateWorkoutSet(item.id, idx, 'weight', e.target.value)}
+                                          className="w-12 md:w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                        />
+                                      </div>
+                                      <div className="flex flex-col items-center">
+                                        {idx === 0 && <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>}
+                                        <input 
+                                          type="number"
+                                          value={set.reps}
+                                          onChange={(e) => updateWorkoutSet(item.id, idx, 'reps', parseInt(e.target.value) || 0)}
+                                          className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
-                                <div className="flex flex-col items-center">
-                                  <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>
-                                  <input 
-                                    type="number"
-                                    value={item.reps}
-                                    onChange={(e) => updateWorkoutItem(item.id, 'reps', parseInt(e.target.value) || 0)}
-                                    className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                                  />
+
+                                <div className="flex items-center gap-4 md:gap-6">
+                                  <div className="flex flex-col items-center">
+                                    <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
+                                    <input 
+                                      type="text"
+                                      value={item.sets}
+                                      onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
+                                      className="w-8 md:w-10 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
+                                    />
+                                  </div>
+                                  <button 
+                                    onClick={() => toggleComplete(item.id)}
+                                    className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 transition-all ${
+                                      item.completed 
+                                        ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
+                                        : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
+                                    }`}
+                                  >
+                                    {item.completed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <Check className="w-5 h-5 md:w-6 md:h-6 text-primary-container" />}
+                                  </button>
                                 </div>
-                                <div className="flex flex-col items-center">
-                                  <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
-                                  <input 
-                                    type="text"
-                                    value={item.sets}
-                                    onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
-                                    className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                                  />
-                                </div>
-                                <button 
-                                  onClick={() => toggleComplete(item.id)}
-                                  className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 transition-all ${
-                                    item.completed 
-                                      ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
-                                      : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
-                                  }`}
-                                >
-                                  {item.completed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <Check className="w-5 h-5 md:w-6 md:h-6 text-primary-container" />}
-                                </button>
                               </div>
                             </motion.div>
                           ))}
@@ -1243,6 +1426,7 @@ function App() {
                     {[
                       { label: 'Protocol Duration', value: isRestDay ? 'RECOVERY' : formatTime(timer), color: isRestDay ? 'text-emerald-400' : 'text-primary-container', icon: isRestDay ? Shield : Terminal },
                       { label: 'System Latency', value: '12ms', color: 'text-primary-container' },
+                      { label: 'Deload Status', value: getDeloadStatus().isDeloadWeek ? 'ACTIVE' : `W${getDeloadStatus().weekInCycle}/${programDuration}`, color: getDeloadStatus().isDeloadWeek ? 'text-emerald-500' : 'text-on-surface-variant' },
                       { label: 'Active Buff', value: 'PRE-WORKOUT ADRENALINE', color: 'text-primary' },
                     ].map((stat) => (
                       <div key={stat.label} className="flex justify-between items-center border-b border-outline-variant/10 pb-2">
@@ -1351,6 +1535,57 @@ function App() {
                 </div>
               </div>
 
+              {/* Deload Configuration */}
+              <div className="bg-surface-container-low p-6 border border-outline-variant/10">
+                <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container mb-6 flex items-center gap-3">
+                  <RefreshCw className="w-5 h-5" />
+                  Deload Cycle Configuration
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Program Duration (Weeks)</label>
+                    <select 
+                      value={programDuration}
+                      onChange={(e) => setProgramDuration(parseInt(e.target.value))}
+                      className="w-full bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                    >
+                      {[4, 5, 6, 7, 8].map(w => <option key={w} value={w}>{w} Weeks</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Program Start Date</label>
+                    <input 
+                      type="date"
+                      value={programStartDate}
+                      onChange={(e) => setProgramStartDate(e.target.value)}
+                      className="w-full bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button 
+                      onClick={() => setIsDeloadEnabled(!isDeloadEnabled)}
+                      className={`w-full py-3 font-headline text-[10px] font-black tracking-widest uppercase transition-all ${
+                        isDeloadEnabled 
+                          ? 'bg-primary-container text-on-primary-container' 
+                          : 'bg-surface-container-highest text-on-surface-variant'
+                      }`}
+                    >
+                      {isDeloadEnabled ? 'Deload Protocol: Active' : 'Deload Protocol: Disabled'}
+                    </button>
+                  </div>
+                </div>
+                {isDeloadEnabled && (
+                  <div className="mt-4 p-3 bg-primary-container/5 border border-primary-container/20">
+                    <div className="flex justify-between items-center">
+                      <div className="font-label text-[8px] text-primary-container uppercase tracking-widest">Current Status</div>
+                      <div className="font-mono text-[10px] text-on-surface">
+                        Week {getDeloadStatus().currentWeek} of Program | {getDeloadStatus().isDeloadWeek ? 'DELOAD ACTIVE' : `Week ${getDeloadStatus().weekInCycle} of ${programDuration}`}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Days Selector */}
                 <div className="lg:col-span-1 space-y-2">
@@ -1388,9 +1623,22 @@ function App() {
                       ) : (
                         schedule.find(d => d.day === selectedDay)?.exercises.map(ex => (
                           <div key={ex.id} className="bg-surface-container-high p-4 flex justify-between items-center group">
-                            <div>
+                            <div className="flex-grow">
                               <div className="font-headline font-bold uppercase tracking-tight text-sm">{ex.name}</div>
-                              <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.target} | {ex.weight} | {ex.reps} reps | {ex.sets} sets</div>
+                              <div className="font-label text-[8px] text-on-surface-variant uppercase mb-2">{ex.target} | {ex.sets} sets</div>
+                              {ex.setData && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                  {ex.setData.map((s, idx) => (
+                                    <div key={idx} className="bg-surface-container-highest/30 p-1 px-2 text-[7px] text-on-surface-variant uppercase flex justify-between">
+                                      <span>S{idx + 1}</span>
+                                      <span className="text-primary-container">{s.weight} x {s.reps}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {!ex.setData && (
+                                <div className="font-label text-[8px] text-on-surface-variant uppercase opacity-60">{ex.weight} | {ex.reps} reps</div>
+                              )}
                             </div>
                             <button 
                               onClick={() => removeExerciseFromSchedule(selectedDay, ex.id)}
@@ -1521,6 +1769,7 @@ function App() {
                       return calendarDays.map((day, i) => {
                         const dateStr = format(day, 'yyyy-MM-dd');
                         const dayEntries = archive.filter(e => e.date === dateStr);
+                        const { isDeloadWeek, weekInCycle, isActiveProgram } = getDeloadStatus(day);
                         const isSelected = selectedArchiveDate && isSameDay(day, selectedArchiveDate);
                         const isCurrentMonth = isSameMonth(day, monthStart);
 
@@ -1530,21 +1779,37 @@ function App() {
                             onClick={() => setSelectedArchiveDate(day)}
                             className={`relative h-14 md:h-24 p-1 md:p-2 transition-all hover:z-10 ${
                               isCurrentMonth ? 'bg-surface-container-low' : 'bg-surface-container-low/30 opacity-30'
-                            } ${isSelected ? 'ring-2 ring-primary-container ring-inset z-10' : ''} border-r border-b border-outline-variant/10`}
+                            } ${isSelected ? 'ring-2 ring-primary-container ring-inset z-10' : ''} ${
+                              isDeloadWeek ? 'bg-emerald-500/5' : ''
+                            } border-r border-b border-outline-variant/10 overflow-hidden`}
                           >
-                            <span className={`font-mono text-[8px] md:text-[10px] ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
-                              {format(day, 'd')}
-                            </span>
+                            {/* Program/Deload Line */}
+                            {isActiveProgram && isCurrentMonth && (
+                              <div className={`absolute bottom-0 left-0 right-0 h-1 md:h-1.5 ${isDeloadWeek ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.4)]'}`} />
+                            )}
+
+                            <div className="flex justify-between items-start">
+                              <span className={`font-mono text-[8px] md:text-[10px] ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
+                                {format(day, 'd')}
+                              </span>
+                              {isDeloadEnabled && isCurrentMonth && (
+                                <span className={`text-[6px] uppercase tracking-tighter ${isDeloadWeek ? 'text-emerald-500 font-bold' : 'text-on-surface-variant/40'}`}>
+                                  {isDeloadWeek ? 'DELOAD' : `W${weekInCycle}`}
+                                </span>
+                              )}
+                            </div>
                             
-                            <div className="mt-1 md:mt-2 space-y-0.5 md:space-y-1">
+                            <div className="mt-1 md:mt-2 flex flex-wrap gap-0.5 md:gap-1 justify-center">
                               {dayEntries.map(entry => (
-                                <div 
-                                  key={entry.id}
-                                  className={`h-1 md:h-1.5 w-full ${
-                                    entry.type === 'COMPLETED' ? 'bg-primary-container' : 
-                                    entry.type === 'INCOMPLETE' ? 'bg-warning' : 'bg-error'
-                                  } opacity-80`}
-                                />
+                                <div key={entry.id} className="flex items-center justify-center">
+                                  {entry.type === 'COMPLETED' ? (
+                                    <CheckCircle2 className="w-2 h-2 md:w-4 md:h-4 text-primary-container" />
+                                  ) : entry.type === 'INCOMPLETE' ? (
+                                    <AlertTriangle className="w-2 h-2 md:w-4 md:h-4 text-amber-500" />
+                                  ) : (
+                                    <XCircle className="w-2 h-2 md:w-4 md:h-4 text-error" />
+                                  )}
+                                </div>
                               ))}
                             </div>
                           </button>
@@ -1582,7 +1847,7 @@ function App() {
                                 <div className="flex items-center gap-3 mb-2">
                                   {entry.type === 'COMPLETED' ? <CheckCircle2 className="w-4 h-4 text-primary-container" /> : 
                                    entry.type === 'INCOMPLETE' ? <AlertTriangle className="w-4 h-4 text-amber-500" /> :
-                                   <AlertTriangle className="w-4 h-4 text-error" />}
+                                   <XCircle className="w-4 h-4 text-error" />}
                                   <span className="font-headline text-sm font-bold uppercase tracking-tight">{entry.details}</span>
                                 </div>
                                 <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest flex items-center gap-3">
@@ -1600,15 +1865,59 @@ function App() {
                                 <div className="space-y-2">
                                   <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10 pb-1">Exercise Intel</div>
                                   {entry.exercises.map(ex => (
-                                    <div key={ex.id} className="bg-surface-container-high p-3 flex justify-between items-center">
-                                      <div>
-                                        <div className="font-headline font-bold uppercase tracking-tight text-[10px]">{ex.name}</div>
-                                        <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.target}</div>
+                                    <div key={ex.id} className="bg-surface-container-high p-3 space-y-2 border border-outline-variant/10">
+                                      <div className="flex justify-between items-center">
+                                        <div>
+                                          <div className="font-headline font-bold uppercase tracking-tight text-[10px]">{ex.name}</div>
+                                          <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.target}</div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.sets} Sets</div>
+                                        </div>
                                       </div>
-                                      <div className="text-right">
-                                        <div className="font-mono text-[10px] text-primary-container">{ex.weight}</div>
-                                        <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.reps}R | {ex.sets}S</div>
-                                      </div>
+                                      {ex.setData ? (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-outline-variant/5">
+                                          {ex.setData.map((s, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-2 bg-surface-container-highest/20 border border-outline-variant/10 rounded">
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
+                                                  <span className="font-headline text-[8px] font-bold text-primary-container">{idx + 1}</span>
+                                                </div>
+                                                <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Set</span>
+                                              </div>
+                                              <div className="flex gap-3">
+                                                <div className="text-right">
+                                                  <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Weight</div>
+                                                  <div className="font-mono text-[10px] text-on-surface leading-none">{s.weight}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                  <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Reps</div>
+                                                  <div className="font-mono text-[10px] text-on-surface leading-none">{s.reps}</div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="flex justify-between items-center p-2 bg-surface-container-highest/20 border border-outline-variant/10 rounded pt-2 mt-2">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
+                                              <span className="font-headline text-[8px] font-bold text-primary-container">1</span>
+                                            </div>
+                                            <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Standard Protocol</span>
+                                          </div>
+                                          <div className="flex gap-3">
+                                            <div className="text-right">
+                                              <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Weight</div>
+                                              <div className="font-mono text-[10px] text-on-surface leading-none">{ex.weight}</div>
+                                            </div>
+                                            <div className="text-right">
+                                              <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Reps</div>
+                                              <div className="font-mono text-[10px] text-on-surface leading-none">{ex.reps}</div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -1634,6 +1943,15 @@ function App() {
                   <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Biometric Analysis</span>
                   <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Operator Stats</h1>
                 </div>
+                {selectedArchiveDate && (
+                  <button 
+                    onClick={() => setSelectedArchiveDate(null)}
+                    className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-[10px] font-black text-primary-container uppercase tracking-widest hover:bg-primary-container/20 transition-all"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Reset to Global Stats
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1702,7 +2020,18 @@ function App() {
                       
                       return (
                         <div key={i} className="flex-1 flex flex-col items-center gap-4 h-full">
-                          <div className="w-full bg-surface-container-high/30 relative group h-full flex items-end">
+                          <div 
+                            className={`w-full bg-surface-container-high/30 relative group h-full flex items-end cursor-pointer transition-all ${
+                              selectedArchiveDate && isSameDay(date, selectedArchiveDate) ? 'ring-1 ring-primary-container bg-primary-container/5' : ''
+                            }`}
+                            onClick={() => {
+                              if (selectedArchiveDate && isSameDay(date, selectedArchiveDate)) {
+                                setSelectedArchiveDate(null);
+                              } else {
+                                setSelectedArchiveDate(date);
+                              }
+                            }}
+                          >
                             {/* Tooltip */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-24 p-2 bg-surface-container-highest border border-primary-container/30 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
                               <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1">{formattedDate}</div>
