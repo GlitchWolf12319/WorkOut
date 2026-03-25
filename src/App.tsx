@@ -31,7 +31,9 @@ import {
   CloudOff,
   RefreshCw,
   Clock,
-  XCircle
+  XCircle,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -204,7 +206,7 @@ interface ArchiveEntry {
   id: string;
   date: string;
   day: string;
-  type: 'COMPLETED' | 'INCOMPLETE';
+  type: 'COMPLETED' | 'INCOMPLETE' | 'BREACH';
   details: string;
   exercises?: WorkoutItem[];
   progress?: number;
@@ -262,7 +264,7 @@ function App() {
   });
   const [programStartDate, setProgramStartDate] = useState<string>(() => {
     const saved = localStorage.getItem('sovereign_program_start_date');
-    return saved ? saved : new Date().toISOString().split('T')[0];
+    return saved ? saved : format(new Date(), 'yyyy-MM-dd');
   });
   const [isDeloadEnabled, setIsDeloadEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('sovereign_deload_enabled');
@@ -510,6 +512,46 @@ function App() {
     return "A Blue Whale (approx. 150,000+ KG)";
   };
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
+  const [editingArchiveEntry, setEditingArchiveEntry] = useState<ArchiveEntry | null>(null);
+
+  const handleEditArchive = (entry: ArchiveEntry) => {
+    setEditingArchiveEntry(entry);
+  };
+
+  const createManualArchiveEntry = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const dayName = DAYS[date.getDay() === 0 ? 6 : date.getDay() - 1];
+    
+    const newEntry: ArchiveEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: dateStr,
+      day: dayName,
+      type: 'COMPLETED',
+      details: `Manual Entry: ${dayName} Cycle`,
+      exercises: [],
+      progress: 100,
+      duration: 0
+    };
+    
+    setEditingArchiveEntry(newEntry);
+  };
+
+  const saveArchiveEdit = (updatedEntry: ArchiveEntry) => {
+    setArchive(prev => {
+      const exists = prev.some(e => e.id === updatedEntry.id);
+      if (exists) {
+        return prev.map(e => e.id === updatedEntry.id ? updatedEntry : e);
+      } else {
+        return [updatedEntry, ...prev].sort((a, b) => b.date.localeCompare(a.date));
+      }
+    });
+    setEditingArchiveEntry(null);
+  };
+
+  const deleteArchiveEntry = (id: string) => {
+    setArchive(prev => prev.filter(e => e.id !== id));
+    setEditingArchiveEntry(null);
+  };
 
   // Persistence Effects
   useEffect(() => {
@@ -585,24 +627,34 @@ function App() {
   // Persistence Effects
   // Data is automatically saved to localStorage whenever state changes.
 
+  const syncWorkoutWithSchedule = useCallback(() => {
+    const today = new Date();
+    const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
+    const todaySchedule = schedule.find(s => s.day === currentDayName);
+    if (todaySchedule) {
+      setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
+    } else {
+      setWorkout([]);
+    }
+  }, [schedule, applyDeloadIfNecessary]);
+
   // Daily Reset & Violation Check
   useEffect(() => {
     const checkViolations = () => {
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = format(today, 'yyyy-MM-dd');
       const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
 
       if (lastChecked && lastChecked !== todayStr) {
-        const lastDate = new Date(lastChecked);
-        let totalPenalty = 0;
+        const lastDate = parseISO(lastChecked);
         let newEntries: ArchiveEntry[] = [];
         
         let checkDate = new Date(lastDate);
         checkDate.setDate(checkDate.getDate() + 1);
         let iterations = 0;
 
-        while (checkDate.toISOString().split('T')[0] < todayStr && iterations < 31) {
-          const dateStr = checkDate.toISOString().split('T')[0];
+        while (format(checkDate, 'yyyy-MM-dd') < todayStr && iterations < 31) {
+          const dateStr = format(checkDate, 'yyyy-MM-dd');
           const dayName = DAYS[checkDate.getDay() === 0 ? 6 : checkDate.getDay() - 1];
           
           const hasEntry = archive.some(entry => entry.date === dateStr);
@@ -639,26 +691,18 @@ function App() {
         }
 
         // Auto-fill Daily Quest
-        const todaySchedule = schedule.find(s => s.day === currentDayName);
-        if (todaySchedule) {
-          setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
-        } else {
-          setWorkout([]);
-        }
+        syncWorkoutWithSchedule();
 
         setIsWorkoutActive(false);
         setLastChecked(todayStr);
       } else if (!lastChecked) {
-        const todaySchedule = schedule.find(s => s.day === currentDayName);
-        if (todaySchedule) {
-          setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
-        }
+        syncWorkoutWithSchedule();
         setLastChecked(todayStr);
       }
     };
 
     checkViolations();
-  }, [lastChecked, archive, schedule]);
+  }, [lastChecked, archive, schedule, syncWorkoutWithSchedule]);
 
   // Sync today's workout with schedule changes
   useEffect(() => {
@@ -747,7 +791,7 @@ function App() {
         
         // Remove today's archive entry if it exists
         // The archive sync useEffect will handle reverting the bonus/penalty XP
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
         const todayEntry = archive.find(e => e.date === todayStr);
         if (todayEntry) {
           setArchive(prevArchive => prevArchive.filter(e => e.date !== todayStr));
@@ -756,11 +800,11 @@ function App() {
         return [];
       });
     }
-  }, [schedule, applyDeloadIfNecessary]);
+  }, [schedule, applyDeloadIfNecessary, archive]);
 
   // Keep archive in sync with today's workout state
   useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
     const todayEntry = archive.find(e => e.date === todayStr);
     if (!todayEntry) return;
 
@@ -788,7 +832,7 @@ function App() {
 
   const logWorkout = useCallback(() => {
     const today = new Date();
-    const dateStr = today.toISOString().split('T')[0];
+    const dateStr = format(today, 'yyyy-MM-dd');
     const dayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
     
     const completedCount = workout.filter(item => item.completed).length;
@@ -833,7 +877,7 @@ function App() {
     if (progress === 100 && workout.length > 0 && isTimerActive) {
       setIsTimerActive(false);
       setIsWorkoutActive(false);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
       const alreadyLogged = archive.some(entry => entry.date === todayStr && entry.type === 'COMPLETED');
       if (!alreadyLogged) {
         logWorkout();
@@ -867,7 +911,7 @@ function App() {
     
     // If re-initializing or reset requested, reset completion status and revert XP/Archive
     if (isReset || (progress === 100 && workout.length > 0)) {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
       
       // Subtract XP for each exercise that was completed
       let exerciseExpToSubtract = 0;
@@ -1297,26 +1341,28 @@ function App() {
               </motion.section>
 
               {/* Dashboard Header */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-4 md:pb-6 gap-4 md:gap-6">
-                <div>
-                  <span className="font-label text-primary-container text-[8px] md:text-[10px] tracking-[0.4em] uppercase">Current Operation</span>
-                  <h1 className="font-headline text-2xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-1 md:mt-2">The Daily Quest</h1>
-                </div>
-                <div className="w-full md:w-auto text-left md:text-right">
-                  <div className="font-label text-on-surface-variant text-[8px] md:text-[10px] tracking-[0.2em] uppercase mb-1 md:mb-2">Completion Status</div>
-                  <div className="flex items-center gap-3 md:gap-4">
-                    <span className="font-headline text-xl md:text-3xl font-bold text-primary-container">{progress}%</span>
-                    <div className="flex-grow md:w-64 h-2 md:h-3 bg-surface-container-highest relative overflow-hidden">
-                      <div className="absolute inset-0 scanline-overlay z-10"></div>
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        className="h-full bg-gradient-to-r from-primary to-primary-container shadow-[0_0_10px_rgba(0,229,255,0.4)]"
-                      />
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-4 md:pb-6 gap-4 md:gap-6">
+                  <div>
+                    <span className="font-label text-primary-container text-[8px] md:text-[10px] tracking-[0.4em] uppercase">Current Operation</span>
+                    <h1 className="font-headline text-2xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-1 md:mt-2">The Daily Quest</h1>
+                  </div>
+                  <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+                    <div className="w-full md:w-auto text-left md:text-right">
+                      <div className="font-label text-on-surface-variant text-[8px] md:text-[10px] tracking-[0.2em] uppercase mb-1 md:mb-2">Completion Status</div>
+                      <div className="flex items-center gap-3 md:gap-4">
+                        <span className="font-headline text-xl md:text-3xl font-bold text-primary-container">{progress}%</span>
+                        <div className="flex-grow md:w-64 h-2 md:h-3 bg-surface-container-highest relative overflow-hidden">
+                          <div className="absolute inset-0 scanline-overlay z-10"></div>
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            className="h-full bg-gradient-to-r from-primary to-primary-container shadow-[0_0_10px_rgba(0,229,255,0.4)]"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
               {/* Bento Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
@@ -1932,6 +1978,8 @@ function App() {
                                     <CheckCircle2 className="w-2 h-2 md:w-4 md:h-4 text-primary-container" />
                                   ) : entry.type === 'INCOMPLETE' ? (
                                     <AlertTriangle className="w-2 h-2 md:w-4 md:h-4 text-amber-500" />
+                                  ) : entry.type === 'BREACH' ? (
+                                    <XCircle className="w-2 h-2 md:w-4 md:h-4 text-error shadow-[0_0_10px_rgba(255,68,68,0.4)]" />
                                   ) : (
                                     <XCircle className="w-2 h-2 md:w-4 md:h-4 text-error" />
                                   )}
@@ -1960,21 +2008,41 @@ function App() {
                     ) : (
                       <div className="space-y-6">
                         {archive.filter(e => e.date === format(selectedArchiveDate, 'yyyy-MM-dd')).length === 0 ? (
-                          <div className="text-on-surface-variant/30 font-headline text-[10px] uppercase tracking-widest text-center py-12 border border-dashed border-outline-variant/20">
-                            No protocol data for this cycle
+                          <div className="flex flex-col items-center justify-center py-12 border border-dashed border-outline-variant/20 space-y-4">
+                            <div className="text-on-surface-variant/30 font-headline text-[10px] uppercase tracking-widest text-center">
+                              No protocol data for this cycle
+                            </div>
+                            <button 
+                              onClick={() => createManualArchiveEntry(selectedArchiveDate)}
+                              className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-[8px] font-black text-primary-container uppercase tracking-widest hover:bg-primary-container/20 transition-all"
+                            >
+                              <Rocket className="w-3 h-3" />
+                              Initialize Manual Entry
+                            </button>
                           </div>
                         ) : (
-                          archive.filter(e => e.date === format(selectedArchiveDate, 'yyyy-MM-dd')).map(entry => (
+                          <>
+                            {archive.filter(e => e.date === format(selectedArchiveDate, 'yyyy-MM-dd')).map(entry => (
                             <div key={entry.id} className="space-y-4">
                               <div className={`p-4 border-l-2 ${
                                 entry.type === 'COMPLETED' ? 'bg-primary-container/5 border-primary-container' : 
-                                entry.type === 'INCOMPLETE' ? 'bg-amber-500/5 border-amber-500' : 'bg-error/5 border-error'
+                                entry.type === 'INCOMPLETE' ? 'bg-amber-500/5 border-amber-500' : 
+                                entry.type === 'BREACH' ? 'bg-error/10 border-error shadow-[inset_0_0_20px_rgba(255,68,68,0.1)]' : 'bg-error/5 border-error'
                               }`}>
-                                <div className="flex items-center gap-3 mb-2">
-                                  {entry.type === 'COMPLETED' ? <CheckCircle2 className="w-4 h-4 text-primary-container" /> : 
-                                   entry.type === 'INCOMPLETE' ? <AlertTriangle className="w-4 h-4 text-amber-500" /> :
-                                   <XCircle className="w-4 h-4 text-error" />}
-                                  <span className="font-headline text-sm font-bold uppercase tracking-tight">{entry.details}</span>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-3">
+                                    {entry.type === 'COMPLETED' ? <CheckCircle2 className="w-4 h-4 text-primary-container" /> : 
+                                     entry.type === 'INCOMPLETE' ? <AlertTriangle className="w-4 h-4 text-amber-500" /> :
+                                     entry.type === 'BREACH' ? <XCircle className="w-4 h-4 text-error animate-pulse" /> :
+                                     <XCircle className="w-4 h-4 text-error" />}
+                                    <span className={`font-headline text-sm font-bold uppercase tracking-tight ${entry.type === 'BREACH' ? 'text-error' : ''}`}>{entry.details}</span>
+                                  </div>
+                                  <button 
+                                    onClick={() => handleEditArchive(entry)}
+                                    className="p-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-outline-variant/10 transition-all"
+                                  >
+                                    <Settings className="w-3 h-3" />
+                                  </button>
                                 </div>
                                 <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest flex items-center gap-3">
                                   <span>Status: {entry.type} {entry.progress !== undefined && `(${entry.progress}%)`}</span>
@@ -2049,7 +2117,15 @@ function App() {
                                 </div>
                               )}
                             </div>
-                          ))
+                          ))}
+                            <button 
+                              onClick={() => createManualArchiveEntry(selectedArchiveDate)}
+                              className="w-full py-3 border border-dashed border-outline-variant/20 text-[8px] uppercase tracking-widest text-on-surface-variant hover:bg-surface-container-highest/20 transition-all flex items-center justify-center gap-2"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add Another Session
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
@@ -2148,7 +2224,7 @@ function App() {
                     {Array.from({ length: 7 }).map((_, i) => {
                       const date = new Date();
                       date.setDate(date.getDate() - (6 - i));
-                      const dateStr = date.toISOString().split('T')[0];
+                      const dateStr = format(date, 'yyyy-MM-dd');
                       const dayEntry = archive.find(e => e.date === dateStr);
                       const height = dayEntry ? (
                         dayEntry.type === 'COMPLETED' ? 100 : 
@@ -2380,6 +2456,266 @@ function App() {
                     className="w-full bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all mt-4"
                   >
                     Acknowledge Intel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Archive Edit Modal */}
+      <AnimatePresence>
+        {editingArchiveEntry && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingArchiveEntry(null)}
+              className="absolute inset-0 bg-background/90 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-surface-container-low border border-primary-container/30 p-6 md:p-8 shadow-[0_0_50px_rgba(0,229,255,0.15)] max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-4 text-primary-container">
+                  <History className="w-8 h-8" />
+                  <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">Edit Protocol Data</h3>
+                </div>
+                <button 
+                  onClick={() => setEditingArchiveEntry(null)}
+                  className="text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-1">
+                    <label className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest block mb-2">Protocol Details</label>
+                    <input 
+                      type="text" 
+                      value={editingArchiveEntry.details}
+                      onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, details: e.target.value})}
+                      className="w-full bg-surface-container-high border border-outline-variant/20 p-3 font-headline text-xs uppercase tracking-tight text-on-surface focus:border-primary-container outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest block mb-2">Duration (sec)</label>
+                    <input 
+                      type="number" 
+                      value={editingArchiveEntry.duration || 0}
+                      onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, duration: parseInt(e.target.value) || 0})}
+                      className="w-full bg-surface-container-high border border-outline-variant/20 p-3 font-headline text-xs uppercase tracking-tight text-on-surface focus:border-primary-container outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest block mb-2">Status</label>
+                    <select 
+                      value={editingArchiveEntry.type}
+                      onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, type: e.target.value as 'COMPLETED' | 'INCOMPLETE' | 'BREACH'})}
+                      className={`w-full bg-surface-container-high border p-3 font-headline text-xs uppercase tracking-tight text-on-surface focus:border-primary-container outline-none transition-all ${
+                        editingArchiveEntry.type === 'BREACH' ? 'border-error/50 text-error' : 'border-outline-variant/20'
+                      }`}
+                    >
+                      <option value="COMPLETED">COMPLETED</option>
+                      <option value="INCOMPLETE">INCOMPLETE</option>
+                      <option value="BREACH">BREACH</option>
+                    </select>
+                  </div>
+                </div>
+
+                {editingArchiveEntry.exercises && (
+                  <div className="space-y-4">
+                    <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10 pb-1">Exercise Intel Modification</div>
+                    {editingArchiveEntry.exercises.map((ex, exIdx) => (
+                      <div key={ex.id} className="bg-surface-container-high p-4 border border-outline-variant/10 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <input 
+                            type="text" 
+                            value={ex.name}
+                            onChange={(e) => {
+                              const newExercises = [...(editingArchiveEntry.exercises || [])];
+                              newExercises[exIdx] = { ...ex, name: e.target.value };
+                              setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                            }}
+                            className="bg-transparent border-b border-outline-variant/20 font-headline font-bold uppercase tracking-tight text-[10px] w-1/2 focus:border-primary-container outline-none"
+                          />
+                          <button 
+                            onClick={() => {
+                              const newExercises = (editingArchiveEntry.exercises || []).filter((_, i) => i !== exIdx);
+                              setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                            }}
+                            className="text-error/40 hover:text-error transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {ex.setData ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {ex.setData.map((s, sIdx) => (
+                              <div key={sIdx} className="flex items-center gap-3 p-2 bg-surface-container-highest/20 border border-outline-variant/10 rounded">
+                                <span className="font-headline text-[8px] font-bold text-primary-container">{sIdx + 1}</span>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Weight</label>
+                                  <input 
+                                    type="text" 
+                                    value={s.weight}
+                                    onChange={(e) => {
+                                      const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                      const newSetData = [...(ex.setData || [])];
+                                      newSetData[sIdx] = { ...s, weight: e.target.value };
+                                      newExercises[exIdx] = { ...ex, setData: newSetData };
+                                      setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                                    }}
+                                    className="w-20 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                    placeholder="Weight"
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Reps</label>
+                                  <input 
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={s.reps || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
+                                      const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                      const newSetData = [...(ex.setData || [])];
+                                      newSetData[sIdx] = { ...s, reps: val };
+                                      newExercises[exIdx] = { ...ex, setData: newSetData };
+                                      setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                                    }}
+                                    className="w-16 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                    placeholder="Reps"
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                    const newSetData = (ex.setData || []).filter((_, i) => i !== sIdx);
+                                    newExercises[exIdx] = { ...ex, setData: newSetData, sets: newSetData.length.toString() };
+                                    setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                                  }}
+                                  className="mt-4 text-error/40 hover:text-error transition-colors"
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                            <button 
+                              onClick={() => {
+                                const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                const newSetData = [...(ex.setData || []), { weight: ex.weight || '0', reps: ex.reps || 0 }];
+                                newExercises[exIdx] = { ...ex, setData: newSetData, sets: newSetData.length.toString() };
+                                setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                              }}
+                              className="col-span-full py-2 border border-dashed border-outline-variant/20 text-[8px] uppercase tracking-widest text-on-surface-variant hover:bg-surface-container-highest/20 transition-all"
+                            >
+                              + Add Set
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-4">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Sets</label>
+                              <input 
+                                type="text" 
+                                value={ex.sets}
+                                onChange={(e) => {
+                                  const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                  newExercises[exIdx] = { ...ex, sets: e.target.value };
+                                  setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                                }}
+                                className="w-16 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                placeholder="Sets"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Weight</label>
+                              <input 
+                                type="text" 
+                                value={ex.weight}
+                                onChange={(e) => {
+                                  const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                  newExercises[exIdx] = { ...ex, weight: e.target.value };
+                                  setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                                }}
+                                className="w-24 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                placeholder="Weight"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Reps</label>
+                              <input 
+                                type="text"
+                                inputMode="numeric"
+                                value={ex.reps || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
+                                  const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                  newExercises[exIdx] = { ...ex, reps: val };
+                                  setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                                }}
+                                className="w-16 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                placeholder="Reps"
+                              />
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const newExercises = [...(editingArchiveEntry.exercises || [])];
+                                const numSets = parseInt(ex.sets) || 1;
+                                const newSetData = Array.from({ length: numSets }, () => ({ weight: ex.weight, reps: ex.reps }));
+                                newExercises[exIdx] = { ...ex, setData: newSetData };
+                                setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                              }}
+                              className="mt-auto mb-1 text-[8px] uppercase tracking-widest text-primary-container/60 hover:text-primary-container transition-colors"
+                            >
+                              Convert to Per-Set
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const newExercises = [...(editingArchiveEntry.exercises || [])];
+                        newExercises.push({
+                          id: Math.random().toString(36).substr(2, 9),
+                          name: 'New Exercise',
+                          sets: '1',
+                          reps: 0,
+                          weight: '0',
+                          completed: true
+                        });
+                        setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
+                      }}
+                      className="w-full py-4 border border-dashed border-outline-variant/20 text-[10px] uppercase tracking-widest text-primary-container hover:bg-primary-container/5 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Exercise to Entry
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    onClick={() => saveArchiveEdit(editingArchiveEntry)}
+                    className="flex-grow bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+                  >
+                    Commit Changes
+                  </button>
+                  <button 
+                    onClick={() => deleteArchiveEntry(editingArchiveEntry.id)}
+                    className="px-6 bg-error/10 text-error border border-error/20 py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:bg-error/20 transition-all"
+                  >
+                    Purge Entry
                   </button>
                 </div>
               </div>
