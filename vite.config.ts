@@ -12,8 +12,10 @@ export default defineConfig(({mode}) => {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom', 'firebase', 'motion', 'lucide-react', 'date-fns'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              return 'vendor';
+            }
           },
         },
       },
