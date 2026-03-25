@@ -446,23 +446,23 @@ function App() {
         
         // Only update if the data is actually different to prevent unnecessary re-renders
         // and potential race conditions with local state updates.
-        setWorkout(prev => JSON.stringify(prev) !== JSON.stringify(data.workout) ? data.workout : prev);
-        setSchedule(prev => JSON.stringify(prev) !== JSON.stringify(data.schedule) ? data.schedule : prev);
-        setArchive(prev => JSON.stringify(prev) !== JSON.stringify(data.archive) ? data.archive : prev);
-        setExp(prev => prev !== data.exp ? data.exp : prev);
-        setProgramDuration(prev => prev !== data.programDuration ? data.programDuration : prev);
-        setProgramStartDate(prev => prev !== data.programStartDate ? data.programStartDate : prev);
-        setIsDeloadEnabled(prev => prev !== data.isDeloadEnabled ? data.isDeloadEnabled : prev);
-        setLastChecked(prev => prev !== data.lastChecked ? data.lastChecked : prev);
-        setCurrentWeight(prev => prev !== data.currentWeight ? data.currentWeight : prev);
-        setTargetWeight(prev => prev !== data.targetWeight ? data.targetWeight : prev);
-        setNutritionGoal(prev => prev !== data.nutritionGoal ? data.nutritionGoal : prev);
-        setProteinPerKg(prev => prev !== data.proteinPerKg ? data.proteinPerKg : prev);
-        setNutritionStartDate(prev => prev !== data.nutritionStartDate ? data.nutritionStartDate : prev);
-        setNutritionDurationWeeks(prev => prev !== data.nutritionDurationWeeks ? data.nutritionDurationWeeks : prev);
-        setCalories(prev => prev !== data.calories ? data.calories : prev);
-        setIsAutoCalories(prev => prev !== data.isAutoCalories ? data.isAutoCalories : prev);
-        setWeightHistory(prev => JSON.stringify(prev) !== JSON.stringify(data.weightHistory || []) ? (data.weightHistory || []) : prev);
+        setWorkout(prev => (data.workout && JSON.stringify(prev) !== JSON.stringify(data.workout)) ? data.workout : prev);
+        setSchedule(prev => (data.schedule && JSON.stringify(prev) !== JSON.stringify(data.schedule)) ? data.schedule : prev);
+        setArchive(prev => (data.archive && JSON.stringify(prev) !== JSON.stringify(data.archive)) ? data.archive : prev);
+        setExp(prev => (data.exp !== undefined && prev !== data.exp) ? data.exp : prev);
+        setProgramDuration(prev => (data.programDuration !== undefined && prev !== data.programDuration) ? data.programDuration : prev);
+        setProgramStartDate(prev => (data.programStartDate !== undefined && prev !== data.programStartDate) ? data.programStartDate : prev);
+        setIsDeloadEnabled(prev => (data.isDeloadEnabled !== undefined && prev !== data.isDeloadEnabled) ? data.isDeloadEnabled : prev);
+        setLastChecked(prev => (data.lastChecked !== undefined && prev !== data.lastChecked) ? data.lastChecked : prev);
+        setCurrentWeight(prev => (data.currentWeight !== undefined && prev !== data.currentWeight) ? data.currentWeight : prev);
+        setTargetWeight(prev => (data.targetWeight !== undefined && prev !== data.targetWeight) ? data.targetWeight : prev);
+        setNutritionGoal(prev => (data.nutritionGoal !== undefined && prev !== data.nutritionGoal) ? data.nutritionGoal : prev);
+        setProteinPerKg(prev => (data.proteinPerKg !== undefined && prev !== data.proteinPerKg) ? data.proteinPerKg : prev);
+        setNutritionStartDate(prev => (data.nutritionStartDate !== undefined && prev !== data.nutritionStartDate) ? data.nutritionStartDate : prev);
+        setNutritionDurationWeeks(prev => (data.nutritionDurationWeeks !== undefined && prev !== data.nutritionDurationWeeks) ? data.nutritionDurationWeeks : prev);
+        setCalories(prev => (data.calories !== undefined && prev !== data.calories) ? data.calories : prev);
+        setIsAutoCalories(prev => (data.isAutoCalories !== undefined && prev !== data.isAutoCalories) ? data.isAutoCalories : prev);
+        setWeightHistory(prev => (data.weightHistory && JSON.stringify(prev) !== JSON.stringify(data.weightHistory)) ? data.weightHistory : prev);
       } else {
         // First time user - initialize Firestore with local data or defaults
         const initialData = {
@@ -538,19 +538,19 @@ function App() {
         localStorage.setItem('sovereign_workout', JSON.stringify(workout));
         localStorage.setItem('sovereign_schedule', JSON.stringify(schedule));
         localStorage.setItem('sovereign_archive', JSON.stringify(archive));
-        localStorage.setItem('sovereign_exp', exp.toString());
-        localStorage.setItem('sovereign_program_duration', programDuration.toString());
-        localStorage.setItem('sovereign_program_start_date', programStartDate);
-        localStorage.setItem('sovereign_deload_enabled', isDeloadEnabled.toString());
-        localStorage.setItem('sovereign_current_weight', currentWeight.toString());
-        localStorage.setItem('sovereign_target_weight', targetWeight.toString());
-        localStorage.setItem('sovereign_nutrition_goal', nutritionGoal);
-        localStorage.setItem('sovereign_protein_per_kg', proteinPerKg.toString());
-        localStorage.setItem('sovereign_nutrition_start_date', nutritionStartDate);
-        localStorage.setItem('sovereign_nutrition_duration_weeks', nutritionDurationWeeks.toString());
-        localStorage.setItem('sovereign_calories', calories.toString());
-        localStorage.setItem('sovereign_auto_calories', isAutoCalories.toString());
-        localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory));
+        localStorage.setItem('sovereign_exp', (exp ?? 0).toString());
+        localStorage.setItem('sovereign_program_duration', (programDuration ?? 0).toString());
+        localStorage.setItem('sovereign_program_start_date', programStartDate ?? '');
+        localStorage.setItem('sovereign_deload_enabled', (isDeloadEnabled ?? false).toString());
+        localStorage.setItem('sovereign_current_weight', (currentWeight ?? 0).toString());
+        localStorage.setItem('sovereign_target_weight', (targetWeight ?? 0).toString());
+        localStorage.setItem('sovereign_nutrition_goal', nutritionGoal ?? 'MAINTAIN');
+        localStorage.setItem('sovereign_protein_per_kg', (proteinPerKg ?? 2.0).toString());
+        localStorage.setItem('sovereign_nutrition_start_date', nutritionStartDate ?? '');
+        localStorage.setItem('sovereign_nutrition_duration_weeks', (nutritionDurationWeeks ?? 12).toString());
+        localStorage.setItem('sovereign_calories', (calories ?? 2500).toString());
+        localStorage.setItem('sovereign_auto_calories', (isAutoCalories ?? true).toString());
+        localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory ?? []));
         if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
       } catch (err) {
         console.error("Failed to save to Firestore", err);
@@ -730,23 +730,23 @@ function App() {
   }, [archive]);
 
   useEffect(() => {
-    localStorage.setItem('sovereign_exp', exp.toString());
+    localStorage.setItem('sovereign_exp', (exp ?? 0).toString());
   }, [exp]);
 
   useEffect(() => {
-    localStorage.setItem('sovereign_current_weight', currentWeight.toString());
+    localStorage.setItem('sovereign_current_weight', (currentWeight ?? 0).toString());
   }, [currentWeight]);
 
   useEffect(() => {
-    localStorage.setItem('sovereign_target_weight', targetWeight.toString());
+    localStorage.setItem('sovereign_target_weight', (targetWeight ?? 0).toString());
   }, [targetWeight]);
 
   useEffect(() => {
-    localStorage.setItem('sovereign_nutrition_goal', nutritionGoal);
+    localStorage.setItem('sovereign_nutrition_goal', nutritionGoal ?? 'MAINTAIN');
   }, [nutritionGoal]);
 
   useEffect(() => {
-    localStorage.setItem('sovereign_protein_per_kg', proteinPerKg.toString());
+    localStorage.setItem('sovereign_protein_per_kg', (proteinPerKg ?? 2.0).toString());
   }, [proteinPerKg]);
 
   useEffect(() => {
