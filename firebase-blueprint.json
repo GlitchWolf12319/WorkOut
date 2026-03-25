@@ -11,7 +11,17 @@
         "streak": { "type": "number", "description": "Current workout streak" },
         "lastWorkoutDate": { "type": "string", "format": "date-time", "description": "Last workout date" },
         "schedule": { "type": "object", "description": "User's weekly workout schedule" },
-        "completedWorkouts": { "type": "array", "items": { "type": "object" }, "description": "History of completed workouts" }
+        "completedWorkouts": { "type": "array", "items": { "type": "object" }, "description": "History of completed workouts" },
+        "currentWeight": { "type": "number", "description": "Current weight in KG" },
+        "targetWeight": { "type": "number", "description": "Target weight in KG" },
+        "nutritionGoal": { "type": "string", "enum": ["BULK", "CUT", "MAINTAIN"], "description": "Current nutrition goal" },
+        "proteinPerKg": { "type": "number", "description": "Protein per KG of bodyweight" },
+        "nutritionStartDate": { "type": "string", "format": "date", "description": "Start date of current nutrition phase" },
+        "nutritionDurationWeeks": { "type": "number", "description": "Duration of nutrition phase in weeks" },
+        "calories": { "type": "number", "description": "Target daily caloric intake" },
+        "isAutoCalories": { "type": "boolean", "description": "Whether calories are automatically calculated" },
+        "weightHistory": { "type": "array", "items": { "type": "object" }, "description": "History of weight entries" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
       },
       "required": ["uid", "exp", "level"]
     }

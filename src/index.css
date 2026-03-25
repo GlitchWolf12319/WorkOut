@@ -22,6 +22,8 @@
   --color-on-error-container: #ffdad6;
   --color-outline-variant: #3b494c;
   --color-on-surface-variant: #bac9cc;
+
+  --animate-spin-slow: spin 3s linear infinite;
 }
 
 @layer base {

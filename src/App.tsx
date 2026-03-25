@@ -33,7 +33,11 @@ import {
   Clock,
   XCircle,
   Plus,
-  Trash2
+  Trash2,
+  Scale,
+  Utensils,
+  TrendingDown,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -191,6 +195,7 @@ interface WorkoutItem {
 interface ScheduleDay {
   day: string;
   exercises: WorkoutItem[];
+  phase?: 'BULK' | 'CUT' | 'MAINTAIN';
 }
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -213,6 +218,12 @@ interface ArchiveEntry {
   duration?: number;
 }
 
+interface WeightEntry {
+  id: string;
+  date: string;
+  weight: number;
+}
+
 export default function AppWrapper() {
   return (
     <ErrorBoundary>
@@ -225,6 +236,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasInitialSyncCompleted, setHasInitialSyncCompleted] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const [workout, setWorkout] = useState<WorkoutItem[]>(() => {
@@ -270,6 +282,65 @@ function App() {
     const saved = localStorage.getItem('sovereign_deload_enabled');
     return saved === 'true';
   });
+  const [currentWeight, setCurrentWeight] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_current_weight');
+    return saved ? parseFloat(saved) : 75;
+  });
+  const [targetWeight, setTargetWeight] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_target_weight');
+    return saved ? parseFloat(saved) : 80;
+  });
+  const [nutritionGoal, setNutritionGoal] = useState<'CUT' | 'BULK' | 'MAINTAIN'>(() => {
+    const saved = localStorage.getItem('sovereign_nutrition_goal');
+    return (saved as any) || 'MAINTAIN';
+  });
+  const [proteinPerKg, setProteinPerKg] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_protein_per_kg');
+    return saved ? parseFloat(saved) : 2.0;
+  });
+  const [nutritionStartDate, setNutritionStartDate] = useState<string>(() => {
+    const saved = localStorage.getItem('sovereign_nutrition_start_date');
+    return saved ? saved : format(new Date(), 'yyyy-MM-dd');
+  });
+  const [nutritionDurationWeeks, setNutritionDurationWeeks] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_nutrition_duration_weeks');
+    return saved ? parseInt(saved) : 12;
+  });
+  const [calories, setCalories] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_calories');
+    return saved ? parseInt(saved) : 2500;
+  });
+  const [isAutoCalories, setIsAutoCalories] = useState<boolean>(() => {
+    const saved = localStorage.getItem('sovereign_auto_calories');
+    return saved === null ? true : saved === 'true';
+  });
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [weightInput, setWeightInput] = useState<string>('');
+  const [weightHistory, setWeightHistory] = useState<WeightEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('sovereign_weight_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  // Auto-calculate calories based on weight and goal
+  useEffect(() => {
+    if (isAutoCalories) {
+      const maintenance = Math.round(currentWeight * 33);
+      let target = maintenance;
+      if (nutritionGoal === 'BULK') target += 400;
+      else if (nutritionGoal === 'CUT') target -= 500;
+      setCalories(target);
+    }
+  }, [currentWeight, nutritionGoal, isAutoCalories]);
+
+  // Keep schedule phase in sync with nutrition goal
+  useEffect(() => {
+    if (!hasInitialSyncCompleted) return;
+    setSchedule(prev => prev.map(day => ({ ...day, phase: nutritionGoal })));
+  }, [nutritionGoal, hasInitialSyncCompleted]);
 
   const getDeloadStatus = useCallback((date: Date = new Date()) => {
     if (!isDeloadEnabled) return { isDeloadWeek: false, currentWeek: 0, weekInCycle: 0, isActiveProgram: false };
@@ -383,6 +454,15 @@ function App() {
         setProgramStartDate(prev => prev !== data.programStartDate ? data.programStartDate : prev);
         setIsDeloadEnabled(prev => prev !== data.isDeloadEnabled ? data.isDeloadEnabled : prev);
         setLastChecked(prev => prev !== data.lastChecked ? data.lastChecked : prev);
+        setCurrentWeight(prev => prev !== data.currentWeight ? data.currentWeight : prev);
+        setTargetWeight(prev => prev !== data.targetWeight ? data.targetWeight : prev);
+        setNutritionGoal(prev => prev !== data.nutritionGoal ? data.nutritionGoal : prev);
+        setProteinPerKg(prev => prev !== data.proteinPerKg ? data.proteinPerKg : prev);
+        setNutritionStartDate(prev => prev !== data.nutritionStartDate ? data.nutritionStartDate : prev);
+        setNutritionDurationWeeks(prev => prev !== data.nutritionDurationWeeks ? data.nutritionDurationWeeks : prev);
+        setCalories(prev => prev !== data.calories ? data.calories : prev);
+        setIsAutoCalories(prev => prev !== data.isAutoCalories ? data.isAutoCalories : prev);
+        setWeightHistory(prev => JSON.stringify(prev) !== JSON.stringify(data.weightHistory || []) ? (data.weightHistory || []) : prev);
       } else {
         // First time user - initialize Firestore with local data or defaults
         const initialData = {
@@ -395,16 +475,27 @@ function App() {
           programStartDate,
           isDeloadEnabled,
           lastChecked,
+          currentWeight,
+          targetWeight,
+          nutritionGoal,
+          proteinPerKg,
+          nutritionStartDate,
+          nutritionDurationWeeks,
+          calories,
+          isAutoCalories,
+          weightHistory,
           level: 1,
           updatedAt: new Date().toISOString()
         };
         setDoc(userDocRef, initialData).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`));
       }
       setIsSyncing(false);
+      setHasInitialSyncCompleted(true);
       setSyncError(null);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
       setIsSyncing(false);
+      setHasInitialSyncCompleted(true);
       setSyncError("Sync failed. Permissions or network error.");
     });
 
@@ -414,7 +505,7 @@ function App() {
   // Firestore Sync - Save Data (Debounced)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    if (!isAuthReady || !user || isSyncing) return;
+    if (!isAuthReady || !user || isSyncing || !hasInitialSyncCompleted) return;
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
@@ -431,6 +522,15 @@ function App() {
           programStartDate,
           isDeloadEnabled,
           lastChecked,
+          currentWeight,
+          targetWeight,
+          nutritionGoal,
+          proteinPerKg,
+          nutritionStartDate,
+          nutritionDurationWeeks,
+          calories,
+          isAutoCalories,
+          weightHistory,
           level: Math.floor(exp / 1000) + 1,
           updatedAt: new Date().toISOString()
         }, { merge: true });
@@ -442,16 +542,26 @@ function App() {
         localStorage.setItem('sovereign_program_duration', programDuration.toString());
         localStorage.setItem('sovereign_program_start_date', programStartDate);
         localStorage.setItem('sovereign_deload_enabled', isDeloadEnabled.toString());
+        localStorage.setItem('sovereign_current_weight', currentWeight.toString());
+        localStorage.setItem('sovereign_target_weight', targetWeight.toString());
+        localStorage.setItem('sovereign_nutrition_goal', nutritionGoal);
+        localStorage.setItem('sovereign_protein_per_kg', proteinPerKg.toString());
+        localStorage.setItem('sovereign_nutrition_start_date', nutritionStartDate);
+        localStorage.setItem('sovereign_nutrition_duration_weeks', nutritionDurationWeeks.toString());
+        localStorage.setItem('sovereign_calories', calories.toString());
+        localStorage.setItem('sovereign_auto_calories', isAutoCalories.toString());
+        localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory));
         if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
       } catch (err) {
         console.error("Failed to save to Firestore", err);
+        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
       }
     }, 2000); // 2 second debounce
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, isDeloadEnabled]);
+  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, isDeloadEnabled, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, hasInitialSyncCompleted]);
 
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -553,6 +663,59 @@ function App() {
     setEditingArchiveEntry(null);
   };
 
+  const handleGoalChange = (goal: 'CUT' | 'BULK' | 'MAINTAIN') => {
+    setNutritionGoal(goal);
+    setNutritionStartDate(format(new Date(), 'yyyy-MM-dd'));
+    let newTarget = currentWeight;
+    if (goal === 'BULK') {
+      newTarget = currentWeight + 5;
+    } else if (goal === 'CUT') {
+      newTarget = currentWeight - 5;
+    }
+    setTargetWeight(newTarget);
+    
+    // Update schedule with the new phase
+    setSchedule(prev => prev.map(day => ({ ...day, phase: goal })));
+  };
+
+  const logWeight = (weight: number) => {
+    const newEntry: WeightEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: format(new Date(), 'yyyy-MM-dd'),
+      weight
+    };
+    setWeightHistory(prev => [newEntry, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
+    setCurrentWeight(weight);
+  };
+
+  const deleteWeightEntry = (id: string) => {
+    setWeightHistory(prev => prev.filter(e => e.id !== id));
+  };
+
+  const proteinRequirement = Math.round(currentWeight * proteinPerKg);
+
+  const getNutritionPhaseStatus = () => {
+    const start = new Date(nutritionStartDate);
+    const durationDays = nutritionDurationWeeks * 7;
+    const end = new Date(start.getTime() + (durationDays * 24 * 60 * 60 * 1000));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const elapsedDays = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const remainingDays = Math.max(0, durationDays - elapsedDays);
+    const progress = Math.min(100, Math.max(0, (elapsedDays / durationDays) * 100));
+    
+    return {
+      startDate: format(start, 'MMM dd, yyyy'),
+      endDate: format(end, 'MMM dd, yyyy'),
+      remainingWeeks: Math.floor(remainingDays / 7),
+      remainingDays: remainingDays % 7,
+      elapsedDays,
+      progress,
+      isCompleted: remainingDays === 0
+    };
+  };
+
   // Persistence Effects
   useEffect(() => {
     localStorage.setItem('sovereign_workout', JSON.stringify(workout));
@@ -569,6 +732,22 @@ function App() {
   useEffect(() => {
     localStorage.setItem('sovereign_exp', exp.toString());
   }, [exp]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_current_weight', currentWeight.toString());
+  }, [currentWeight]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_target_weight', targetWeight.toString());
+  }, [targetWeight]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_nutrition_goal', nutritionGoal);
+  }, [nutritionGoal]);
+
+  useEffect(() => {
+    localStorage.setItem('sovereign_protein_per_kg', proteinPerKg.toString());
+  }, [proteinPerKg]);
 
   useEffect(() => {
     if (lastChecked) {
@@ -1161,7 +1340,7 @@ function App() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden md:flex space-x-8 font-headline uppercase text-[10px] tracking-[0.2em]">
-            {['Daily Quest', 'Workout Archive', 'Schedule', 'User Stats'].map((tab) => (
+            {['Daily Quest', 'Workout Archive', 'Schedule', 'User Stats', 'Nutrition'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1226,6 +1405,7 @@ function App() {
                 { name: 'Workout Archive', icon: History },
                 { name: 'Schedule', icon: CalendarIcon },
                 { name: 'User Stats', icon: BarChart3 },
+                { name: 'Nutrition', icon: Utensils },
               ].map((item) => (
                 <button
                   key={item.name}
@@ -1393,6 +1573,29 @@ function App() {
                             animate={{ width: `${rankProgress}%` }}
                             className="h-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.6)]" 
                           />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Nutrition Status Card (Mobile First) */}
+                <div className="lg:hidden">
+                  <div className="bg-surface-container-low p-4 border border-outline-variant/10 relative group overflow-hidden">
+                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+                      <Utensils className="w-32 h-32 text-primary-container" />
+                    </div>
+                    <div className="relative z-10">
+                      <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-[0.2em] mb-1">Nutrition Protocol</div>
+                      <div className="font-headline text-2xl font-black text-primary-container glow-text-primary">{nutritionGoal}</div>
+                      <div className="mt-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Protein Target</span>
+                          <span className="font-mono text-sm text-on-surface font-bold">{proteinRequirement}G</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Current Weight</span>
+                          <span className="font-mono text-sm text-on-surface">{currentWeight} KG</span>
                         </div>
                       </div>
                     </div>
@@ -1618,31 +1821,67 @@ function App() {
                   </div>
 
                   {/* Rank Progress Card (Desktop) */}
-                  <div className="hidden lg:block bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-4 md:p-6 relative group overflow-hidden">
-                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                      <BarChart3 className="w-32 h-32 text-primary-container" />
-                    </div>
-                    <div className="relative z-10">
-                      <div className="flex justify-between items-start mb-6">
-                        <div>
-                          <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-[0.2em]">Rank Standing</div>
-                          <div className="font-headline text-4xl font-black text-primary-container glow-text-primary">{currentRank.name}</div>
+                  <div className="hidden lg:block space-y-6">
+                    <div className="bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-4 md:p-6 relative group overflow-hidden">
+                      <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+                        <BarChart3 className="w-32 h-32 text-primary-container" />
+                      </div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-6">
+                          <div>
+                            <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-[0.2em]">Rank Standing</div>
+                            <div className="font-headline text-4xl font-black text-primary-container glow-text-primary">{currentRank.name}</div>
+                          </div>
+                          <div className="bg-primary-container/10 px-2 py-1 border border-primary-container/20">
+                            <span className="font-mono text-[8px] text-primary-container">{currentRank.title}</span>
+                          </div>
                         </div>
-                        <div className="bg-primary-container/10 px-2 py-1 border border-primary-container/20">
-                          <span className="font-mono text-[8px] text-primary-container">{currentRank.title}</span>
+                        <div className="space-y-2">
+                          <div className="flex justify-between font-label text-[8px] text-on-surface-variant uppercase">
+                            <span>{nextRank ? `XP to Rank ${nextRank.name}` : 'MAX RANK REACHED'}</span>
+                            <span>{exp.toLocaleString()} / {nextRank ? nextRank.min.toLocaleString() : 'MAX'}</span>
+                          </div>
+                          <div className="w-full h-1 bg-surface-container-highest">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${rankProgress}%` }}
+                              className="h-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.6)]" 
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between font-label text-[8px] text-on-surface-variant uppercase">
-                          <span>{nextRank ? `XP to Rank ${nextRank.name}` : 'MAX RANK REACHED'}</span>
-                          <span>{exp.toLocaleString()} / {nextRank ? nextRank.min.toLocaleString() : 'MAX'}</span>
-                        </div>
-                        <div className="w-full h-1 bg-surface-container-highest">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${rankProgress}%` }}
-                            className="h-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.6)]" 
-                          />
+                    </div>
+
+                    {/* Nutrition Protocol Card (Desktop) */}
+                    <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative group overflow-hidden">
+                      <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
+                        <Utensils className="w-48 h-48 text-primary-container" />
+                      </div>
+                      <div className="relative z-10">
+                        <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-[0.3em] mb-2">Nutrition Protocol</div>
+                        <div className="font-headline text-3xl font-black text-primary-container glow-text-primary">{nutritionGoal}</div>
+                        <div className="mt-6 space-y-4">
+                          <div className="flex justify-between items-center">
+                            <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Protein Target</span>
+                            <span className="font-mono text-lg text-on-surface font-bold">{proteinRequirement}G</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Current Weight</span>
+                            <span className="font-mono text-lg text-on-surface">{currentWeight} KG</span>
+                          </div>
+                          <div className="pt-2">
+                            <div className="flex justify-between font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-2">
+                              <span>Progress to {targetWeight} KG</span>
+                              <span>{Math.abs(targetWeight - currentWeight).toFixed(1)} KG Delta</span>
+                            </div>
+                            <div className="w-full h-1 bg-surface-container-highest">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.min(100, (currentWeight / targetWeight) * 100)}%` }}
+                                className={`h-full ${nutritionGoal === 'BULK' ? 'bg-primary-container' : 'bg-error'}`}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1782,9 +2021,22 @@ function App() {
                 {/* Exercises for Selected Day */}
                 <div className="lg:col-span-3 space-y-6">
                   <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-                    <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container mb-6 flex items-center gap-3">
-                      <CalendarIcon className="w-5 h-5" />
-                      {selectedDay} Routine
+                    <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container mb-6 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <CalendarIcon className="w-5 h-5" />
+                        {selectedDay} Routine
+                      </div>
+                      {schedule.find(d => d.day === selectedDay)?.phase && (
+                        <div className={`text-[10px] px-3 py-1 border ${
+                          schedule.find(d => d.day === selectedDay)?.phase === 'BULK' 
+                            ? 'bg-primary-container/10 border-primary-container/30 text-primary-container' 
+                            : schedule.find(d => d.day === selectedDay)?.phase === 'CUT'
+                            ? 'bg-error/10 border-error/30 text-error'
+                            : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant'
+                        }`}>
+                          PHASE: {schedule.find(d => d.day === selectedDay)?.phase}
+                        </div>
+                      )}
                     </h3>
 
                     <div className="space-y-4 mb-8">
@@ -2134,6 +2386,343 @@ function App() {
               </div>
             </motion.div>
           )}
+          {activeTab === 'Nutrition' && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-8"
+            >
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
+                <div>
+                  <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Metabolic Optimization</span>
+                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Nutrition Protocol</h1>
+                </div>
+                <div className="flex items-center gap-4 bg-surface-container-low p-4 border border-outline-variant/10">
+                  <div className="text-right">
+                    <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">Current Weight</div>
+                    <div className="font-headline text-2xl font-black text-primary-container uppercase tracking-tighter leading-none">
+                      {currentWeight} <span className="text-xs">KG</span>
+                    </div>
+                  </div>
+                  <Scale className="w-8 h-8 text-primary-container/20" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Left Column: Active Protocol & Logging */}
+                <div className="space-y-8">
+                  {/* Quick Weight Log */}
+                  <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <Scale className="w-16 h-16" />
+                    </div>
+                    <h3 className="font-headline text-xs font-black uppercase tracking-widest mb-6 flex items-center gap-2 text-primary-container">
+                      <Plus className="w-3 h-3" />
+                      Log New Weight
+                    </h3>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input 
+                        type="number"
+                        step="0.1"
+                        placeholder="00.0"
+                        value={weightInput}
+                        onChange={(e) => setWeightInput(e.target.value)}
+                        className="flex-grow bg-surface-container-high border border-outline-variant/30 p-4 font-mono text-xl text-on-surface focus:border-primary-container outline-none transition-all placeholder:opacity-20"
+                      />
+                      <button 
+                        onClick={() => {
+                          const w = parseFloat(weightInput);
+                          if (w > 0) {
+                            logWeight(w);
+                            setWeightInput('');
+                          }
+                        }}
+                        className="bg-primary-container text-on-primary-container py-4 sm:px-8 font-headline text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all active:scale-95"
+                      >
+                        Log
+                      </button>
+                    </div>
+                    <p className="text-[7px] text-on-surface-variant uppercase tracking-widest mt-4 opacity-50">
+                      Operator biometrics are synced across all protocol modules.
+                    </p>
+                  </div>
+
+                  {/* Caloric Engine */}
+                  <div className="bg-surface-container-low p-8 border border-outline-variant/10 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-6 opacity-5">
+                      <Zap className="w-24 h-24" />
+                    </div>
+                    <div className="flex justify-between items-start mb-8">
+                      <div>
+                        <span className="font-label text-primary-container text-[8px] tracking-[0.3em] uppercase">Caloric Engine</span>
+                        <h3 className="font-headline text-xl font-black text-on-surface uppercase tracking-tighter mt-1">Daily Target</h3>
+                      </div>
+                      <button 
+                        onClick={() => setIsAutoCalories(!isAutoCalories)}
+                        className={`flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all border ${
+                          isAutoCalories 
+                            ? 'bg-primary-container/10 text-primary-container border-primary-container/30' 
+                            : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30'
+                        }`}
+                      >
+                        {isAutoCalories ? <Zap className="w-3 h-3" /> : <Settings className="w-3 h-3" />}
+                        {isAutoCalories ? 'Auto-Sync' : 'Manual'}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-x-12 gap-y-8 mb-8">
+                      <div className="flex items-baseline gap-2">
+                        {isAutoCalories ? (
+                          <div className="font-headline text-5xl sm:text-6xl font-black text-primary-container tracking-tighter">
+                            {calories}
+                          </div>
+                        ) : (
+                          <input 
+                            type="number"
+                            value={calories}
+                            onChange={(e) => setCalories(parseInt(e.target.value) || 0)}
+                            className="bg-transparent border-b-2 border-primary-container/30 font-headline text-5xl sm:text-6xl text-primary-container focus:border-primary-container outline-none w-32 sm:w-48 tracking-tighter"
+                          />
+                        )}
+                        <span className="font-headline text-lg sm:text-xl text-on-surface-variant uppercase font-bold">KCAL</span>
+                      </div>
+
+                      <div className="flex items-baseline gap-2 sm:border-l sm:border-outline-variant/20 sm:pl-8">
+                        <div className="font-headline text-4xl sm:text-5xl font-black text-on-surface tracking-tighter">
+                          {proteinRequirement}
+                        </div>
+                        <span className="font-headline text-sm sm:text-lg text-on-surface-variant uppercase font-bold">PRO (G)</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 border-t border-outline-variant/10 pt-8">
+                      <div className="text-center">
+                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-1">Fats</div>
+                        <div className="font-headline text-sm font-black text-on-surface">{Math.round((calories * 0.25) / 9)}G</div>
+                      </div>
+                      <div className="text-center border-l border-outline-variant/10">
+                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-1">Carbs</div>
+                        <div className="font-headline text-sm font-black text-on-surface">{Math.round((calories - (proteinRequirement * 4) - (calories * 0.25)) / 4)}G</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phase Timeline */}
+                  <div className="bg-surface-container-low p-8 border border-outline-variant/10">
+                    <h3 className="font-headline text-xs font-black uppercase tracking-widest mb-8 flex items-center gap-2 text-on-surface-variant">
+                      <Clock className="w-4 h-4" />
+                      Phase Timeline
+                    </h3>
+                    
+                    {(() => {
+                      const status = getNutritionPhaseStatus();
+                      return (
+                        <div className="space-y-8">
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-end">
+                              <div>
+                                <div className="font-headline text-2xl font-black text-on-surface uppercase tracking-tight">
+                                  {status.isCompleted ? 'PHASE COMPLETE' : `WEEK ${Math.floor(status.elapsedDays / 7) + 1} OF ${nutritionDurationWeeks}`}
+                                </div>
+                              </div>
+                              <div className="font-mono text-xs text-primary-container font-bold">{Math.round(status.progress)}%</div>
+                            </div>
+                            <div className="h-2 bg-surface-container-highest/30 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${status.progress}%` }}
+                                className="h-full bg-primary-container shadow-[0_0_15px_rgba(0,229,255,0.4)]"
+                              />
+                            </div>
+                            <div className="flex justify-between font-mono text-[8px] text-on-surface-variant/50 uppercase tracking-widest">
+                              <span>{status.startDate}</span>
+                              <span>{status.endDate}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
+                              <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Time Remaining</div>
+                              <div className="font-headline text-sm text-on-surface uppercase font-black">
+                                {status.remainingWeeks}W {status.remainingDays}D
+                              </div>
+                            </div>
+                            <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
+                              <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Phase Duration</div>
+                              <div className="flex items-center gap-2">
+                                {isEditingGoal ? (
+                                  <input 
+                                    type="number"
+                                    min="1"
+                                    max="52"
+                                    value={nutritionDurationWeeks}
+                                    onChange={(e) => setNutritionDurationWeeks(parseInt(e.target.value) || 1)}
+                                    className="w-10 bg-transparent border-b border-primary-container/30 font-headline text-sm text-primary-container focus:border-primary-container outline-none font-black"
+                                  />
+                                ) : (
+                                  <span className="font-headline text-sm text-on-surface font-black">{nutritionDurationWeeks}</span>
+                                )}
+                                <span className="font-headline text-[10px] text-on-surface uppercase font-bold">Weeks</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Right Column: Configuration & History */}
+                <div className="space-y-8">
+                  {/* Target & Goal */}
+                  <div className="bg-surface-container-low p-6 border border-outline-variant/10 space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-headline text-xs font-black uppercase tracking-widest text-on-surface-variant">Phase Configuration</h3>
+                      <button 
+                        onClick={() => setIsEditingGoal(!isEditingGoal)}
+                        className="flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all border bg-primary-container/10 text-primary-container border-primary-container/30 hover:bg-primary-container/20"
+                      >
+                        {isEditingGoal ? <Lock className="w-3 h-3" /> : <Edit2 className="w-3 h-3" />}
+                        {isEditingGoal ? 'Lock' : 'Edit'}
+                      </button>
+                    </div>
+                    
+                    <div className="flex justify-between items-center border-b border-outline-variant/10 pb-4">
+                      <h3 className="font-headline text-xs font-black uppercase tracking-widest text-on-surface-variant">Phase Goal</h3>
+                      {isEditingGoal ? (
+                        <div className="flex gap-1">
+                          {(['CUT', 'BULK', 'MAINTAIN'] as const).map((goal) => (
+                            <button
+                              key={goal}
+                              onClick={() => handleGoalChange(goal)}
+                              className={`px-3 py-1 text-[8px] font-black uppercase tracking-tighter transition-all border ${
+                                nutritionGoal === goal 
+                                  ? 'bg-primary-container text-on-primary-container border-primary-container' 
+                                  : 'bg-transparent text-on-surface-variant/50 border-outline-variant/20 hover:border-primary-container/30'
+                              }`}
+                            >
+                              {goal}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="px-4 py-1 bg-primary-container/10 text-primary-container border border-primary-container/20 font-headline text-[10px] font-black uppercase tracking-widest">
+                          {nutritionGoal}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
+                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Target Weight</div>
+                        <div className="flex items-center gap-2">
+                          {isEditingGoal ? (
+                            <input 
+                              type="number"
+                              value={targetWeight}
+                              onChange={(e) => setTargetWeight(parseFloat(e.target.value) || 0)}
+                              className="w-16 bg-transparent border-b border-primary-container/30 font-headline text-lg text-primary-container focus:border-primary-container outline-none"
+                            />
+                          ) : (
+                            <span className="font-headline text-lg text-on-surface font-black">{targetWeight}</span>
+                          )}
+                          <span className="font-headline text-xs text-on-surface uppercase font-bold">KG</span>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
+                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Protein Intensity</div>
+                        <div className="flex flex-col gap-2">
+                          <div className="font-headline text-lg text-primary-container font-black">{proteinPerKg} <span className="text-[10px] opacity-50">G/KG</span></div>
+                          {isEditingGoal && (
+                            <input 
+                              type="range"
+                              min="1.2"
+                              max="3.5"
+                              step="0.1"
+                              value={proteinPerKg}
+                              onChange={(e) => setProteinPerKg(parseFloat(e.target.value) || 0)}
+                              className="w-full h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary-container"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Weight History List */}
+                  <div className="bg-surface-container-low p-6 border border-outline-variant/10">
+                    <h3 className="font-headline text-xs font-black uppercase tracking-widest mb-4 flex justify-between items-center">
+                      <span>Weight History</span>
+                      {weightHistory.length > 1 && (
+                        <div className="flex items-center gap-1">
+                          {(() => {
+                            const latest = weightHistory[0].weight;
+                            const initial = weightHistory[weightHistory.length - 1].weight;
+                            const diff = latest - initial;
+                            const isGain = diff > 0;
+                            return (
+                              <span className={`font-mono text-[9px] ${isGain ? 'text-primary-container' : 'text-error'}`}>
+                                {isGain ? '+' : ''}{diff.toFixed(1)} KG
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </h3>
+                    <div className="space-y-2 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                      {weightHistory.length === 0 ? (
+                        <div className="text-center py-12 border border-dashed border-outline-variant/20">
+                          <p className="text-[8px] text-on-surface-variant uppercase tracking-widest opacity-30">Awaiting biometric data...</p>
+                        </div>
+                      ) : (
+                        weightHistory.map((entry) => (
+                          <div key={entry.id} className="flex justify-between items-center p-3 bg-surface-container-high/30 border border-outline-variant/5 group hover:bg-surface-container-high transition-colors">
+                            <div>
+                              <div className="font-mono text-[11px] text-on-surface font-bold">{entry.weight} KG</div>
+                              <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest">{format(parseISO(entry.date), 'MMM dd, yyyy')}</div>
+                            </div>
+                            <button 
+                              onClick={() => deleteWeightEntry(entry.id)}
+                              className="opacity-0 group-hover:opacity-100 p-2 text-error hover:bg-error/10 transition-all"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Insight & Strategy */}
+                  <div className="bg-primary-container/5 border border-primary-container/20 p-8 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <Target className="w-32 h-32" />
+                    </div>
+                    <div className="flex items-center gap-3 text-primary-container mb-4">
+                      <Zap className="w-5 h-5" />
+                      <h3 className="font-headline text-sm font-black uppercase tracking-widest">Strategic Protocol Insight</h3>
+                    </div>
+                    <p className="text-xs text-on-surface-variant leading-relaxed uppercase max-w-2xl">
+                      {nutritionGoal === 'BULK' && "Current objective: Mass Accumulation. Focus on a slight caloric surplus (250-500 kcal). Prioritize consistent protein intake to maximize muscle protein synthesis. Progressive overload in the 8-12 rep range is critical."}
+                      {nutritionGoal === 'CUT' && "Current objective: Adipose Reduction. Maintain a caloric deficit while keeping protein high (2.2g/kg+) to preserve lean tissue. Monitor strength levels closely; any significant drop indicates excessive deficit."}
+                      {nutritionGoal === 'MAINTAIN' && "Current objective: Body Recomposition. Maintain current caloric intake while optimizing training intensity. Focus on nutrient timing around training windows to improve performance and recovery."}
+                    </p>
+                    <div className="mt-8 flex gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
+                        <span className="font-label text-[8px] text-primary-container uppercase tracking-widest">System Active</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-on-surface-variant/20"></div>
+                        <span className="font-label text-[8px] text-on-surface-variant/50 uppercase tracking-widest">Auto-Sync Enabled</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'User Stats' && (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
@@ -2730,6 +3319,7 @@ function App() {
           { icon: Bolt, label: 'Quest', tab: 'Daily Quest' },
           { icon: History, label: 'Archive', tab: 'Workout Archive' },
           { icon: CalendarIcon, label: 'Schedule', tab: 'Schedule' },
+          { icon: Utensils, label: 'Fuel', tab: 'Nutrition' },
           { icon: BarChart3, label: 'Stats', tab: 'User Stats' },
         ].map((item) => (
           <button 
