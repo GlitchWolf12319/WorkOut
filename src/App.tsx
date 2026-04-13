@@ -384,7 +384,13 @@ function App() {
   // Keep schedule phase in sync with nutrition goal
   useEffect(() => {
     if (!hasInitialSyncCompleted) return;
-    setSchedule(prev => prev.map(day => ({ ...day, phase: nutritionGoal })));
+    setSchedule(prev => {
+      const newSchedule: WeeklySchedule = {};
+      for (const week in prev) {
+        newSchedule[week] = prev[week].map(day => ({ ...day, phase: nutritionGoal }));
+      }
+      return newSchedule;
+    });
   }, [nutritionGoal, hasInitialSyncCompleted]);
 
   const getDeloadStatus = useCallback((date: Date = new Date()) => {
@@ -492,7 +498,14 @@ function App() {
         // Only update if the data is actually different to prevent unnecessary re-renders
         // and potential race conditions with local state updates.
         setWorkout(prev => (data.workout && JSON.stringify(prev) !== JSON.stringify(data.workout)) ? data.workout : prev);
-        setSchedule(prev => (data.schedule && JSON.stringify(prev) !== JSON.stringify(data.schedule)) ? data.schedule : prev);
+        setSchedule(prev => {
+          if (!data.schedule) return prev;
+          let newSchedule = data.schedule;
+          if (Array.isArray(newSchedule)) {
+            newSchedule = { 1: newSchedule };
+          }
+          return JSON.stringify(prev) !== JSON.stringify(newSchedule) ? newSchedule : prev;
+        });
         setArchive(prev => (data.archive && JSON.stringify(prev) !== JSON.stringify(data.archive)) ? data.archive : prev);
         setExp(prev => (data.exp !== undefined && prev !== data.exp) ? data.exp : prev);
         setProgramDuration(prev => (data.programDuration !== undefined && prev !== data.programDuration) ? data.programDuration : prev);
@@ -724,7 +737,13 @@ function App() {
     setTargetWeight(newTarget);
     
     // Update schedule with the new phase
-    setSchedule(prev => prev.map(day => ({ ...day, phase: goal })));
+    setSchedule(prev => {
+      const newSchedule: WeeklySchedule = {};
+      for (const week in prev) {
+        newSchedule[week] = prev[week].map(day => ({ ...day, phase: goal }));
+      }
+      return newSchedule;
+    });
   };
 
   const logWeight = (weight: number) => {
@@ -1391,11 +1410,43 @@ function App() {
         const baseExercises = weekData.days[mappedDay] || [];
         const weakpointExercises = weakpoint && program.weakpointAdditions?.[weakpoint]?.[mappedDay] || [];
         
-        const combinedExercises: WorkoutItem[] = [...baseExercises, ...weakpointExercises].map(ex => ({
-          ...ex,
-          id: Math.random().toString(36).substr(2, 9),
-          completed: false
-        }));
+        let combinedExercises: WorkoutItem[] = [];
+        if (weakpointExercises.length > 0) {
+          let wpIndex = 0;
+          for (const ex of baseExercises) {
+            if (ex.name.startsWith('Weak Point Exercise')) {
+              if (wpIndex < weakpointExercises.length) {
+                combinedExercises.push({
+                  ...weakpointExercises[wpIndex],
+                  id: Math.random().toString(36).substr(2, 9),
+                  completed: false
+                });
+                wpIndex++;
+              }
+            } else {
+              combinedExercises.push({
+                ...ex,
+                id: Math.random().toString(36).substr(2, 9),
+                completed: false
+              });
+            }
+          }
+          // Append any remaining weakpoint exercises
+          while (wpIndex < weakpointExercises.length) {
+            combinedExercises.push({
+              ...weakpointExercises[wpIndex],
+              id: Math.random().toString(36).substr(2, 9),
+              completed: false
+            });
+            wpIndex++;
+          }
+        } else {
+          combinedExercises = baseExercises.map(ex => ({
+            ...ex,
+            id: Math.random().toString(36).substr(2, 9),
+            completed: false
+          }));
+        }
 
         return {
           day,
