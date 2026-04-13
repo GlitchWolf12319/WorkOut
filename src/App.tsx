@@ -14,7 +14,10 @@ import {
   CheckCircle2, 
   Lock, 
   Rocket,
+  Trophy,
   ChevronRight,
+  ChevronDown,
+  LayoutList,
   Terminal,
   Settings,
   ChevronLeft,
@@ -37,7 +40,9 @@ import {
   Scale,
   Utensils,
   TrendingDown,
-  Edit2
+  Edit2,
+  Play,
+  Youtube
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -51,8 +56,18 @@ import {
   isSameDay, 
   addMonths, 
   subMonths,
-  parseISO
+  parseISO,
+  differenceInDays
 } from 'date-fns';
+import { 
+  WorkoutItem, 
+  ScheduleDay, 
+  WeeklySchedule,
+  ArchiveEntry, 
+  WeightEntry,
+  WorkoutSet
+} from './types';
+import { PROGRAMS, Program } from './data/programs';
 import { auth, db, googleProvider } from './firebase';
 import { 
   onAuthStateChanged, 
@@ -67,6 +82,7 @@ import {
   onSnapshot,
   getDocFromServer
 } from 'firebase/firestore';
+import { videoIds } from './videos';
 
 // Error Handling Spec for Firestore Operations
 enum OperationType {
@@ -150,18 +166,18 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-background flex items-center justify-center p-8">
-          <div className="max-w-md w-full bg-surface-container-low border border-error/30 p-8 text-center">
+          <div className="max-w-md w-full bg-[#1c1c1e] border border-error/30 p-8 text-center">
             <AlertTriangle className="w-12 h-12 text-error mx-auto mb-4" />
-            <h2 className="font-headline text-xl font-black text-on-surface uppercase tracking-tighter mb-2">System Critical Error</h2>
-            <p className="text-on-surface-variant text-xs uppercase tracking-widest mb-6 leading-relaxed">
+            <h2 className="font-sans font-semibold text-xl font-bold text-on-surface   mb-2">System Critical Error</h2>
+            <p className="text-on-surface-variant text-xs   mb-6 leading-relaxed">
               The protocol has encountered a fatal exception. Please refresh or contact support.
             </p>
             <div className="bg-error/5 p-4 mb-6 text-left overflow-auto max-h-32">
-              <code className="text-[10px] text-error font-mono break-all">{this.state.errorInfo}</code>
+              <code className="text-sm text-error font-mono break-all">{this.state.errorInfo}</code>
             </div>
             <button 
               onClick={() => window.location.reload()}
-              className="w-full bg-primary-container text-on-primary-container font-headline text-[10px] font-black tracking-widest uppercase py-3 hover:brightness-110 transition-all"
+              className="w-full bg-primary-container text-on-primary-container font-sans font-semibold text-sm font-bold   py-3 hover:brightness-110 transition-all"
             >
               Reboot System
             </button>
@@ -173,32 +189,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-
-
-interface WorkoutSet {
-  weight: string;
-  reps: number;
-}
-
-interface WorkoutItem {
-  id: string;
-  name: string;
-  target: string;
-  weight: string;
-  reps: number;
-  sets: string;
-  setData?: WorkoutSet[];
-  completed: boolean;
-  isDeload?: boolean;
-}
-
-interface ScheduleDay {
-  day: string;
-  exercises: WorkoutItem[];
-  phase?: 'BULK' | 'CUT' | 'MAINTAIN';
-}
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const DAYS = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7', 'Day 8', 'Day 9', 'Day 10'];
 
 const INITIAL_SCHEDULE: ScheduleDay[] = DAYS.map(day => ({
   day,
@@ -206,23 +197,6 @@ const INITIAL_SCHEDULE: ScheduleDay[] = DAYS.map(day => ({
 }));
 
 const INITIAL_WORKOUT: WorkoutItem[] = [];
-
-interface ArchiveEntry {
-  id: string;
-  date: string;
-  day: string;
-  type: 'COMPLETED' | 'INCOMPLETE' | 'BREACH';
-  details: string;
-  exercises?: WorkoutItem[];
-  progress?: number;
-  duration?: number;
-}
-
-interface WeightEntry {
-  id: string;
-  date: string;
-  weight: number;
-}
 
 export default function AppWrapper() {
   return (
@@ -248,15 +222,23 @@ function App() {
       return INITIAL_WORKOUT;
     }
   });
-  const [schedule, setSchedule] = useState<ScheduleDay[]>(() => {
+  const [schedule, setSchedule] = useState<WeeklySchedule>(() => {
     try {
       const saved = localStorage.getItem('sovereign_schedule');
-      return saved ? JSON.parse(saved) : INITIAL_SCHEDULE;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return { 1: parsed };
+        }
+        return parsed;
+      }
+      return { 1: INITIAL_SCHEDULE };
     } catch (e) {
       console.error("Failed to parse schedule from localStorage", e);
-      return INITIAL_SCHEDULE;
+      return { 1: INITIAL_SCHEDULE };
     }
   });
+  const [currentWeekTab, setCurrentWeekTab] = useState<number>(1);
   const [archive, setArchive] = useState<ArchiveEntry[]>(() => {
     try {
       const saved = localStorage.getItem('sovereign_archive');
@@ -298,6 +280,38 @@ function App() {
     const saved = localStorage.getItem('sovereign_protein_per_kg');
     return saved ? parseFloat(saved) : 2.0;
   });
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(() => {
+    return localStorage.getItem('sovereign_selected_program_id');
+  });
+  const [weakpointFocus, setWeakpointFocus] = useState<string | null>(() => {
+    return localStorage.getItem('sovereign_weakpoint_focus');
+  });
+  const [isProgramModalOpen, setIsProgramModalOpen] = useState(false);
+  const [isWeakpointModalOpen, setIsWeakpointModalOpen] = useState(false);
+  const [isScheduleConfigModalOpen, setIsScheduleConfigModalOpen] = useState(false);
+  const [dayMapping, setDayMapping] = useState<{[key: string]: string}>(() => {
+    const saved = localStorage.getItem('sovereign_day_mapping');
+    return saved ? JSON.parse(saved) : {
+      'Day 1': 'Day 1',
+      'Day 2': 'Day 2',
+      'Day 3': 'Day 3',
+      'Day 4': 'Day 4',
+      'Day 5': 'Day 5',
+      'Day 6': 'Day 6',
+      'Day 7': 'Day 7',
+      'Day 8': 'Day 8',
+      'Day 9': 'Day 9',
+      'Day 10': 'Day 10'
+    };
+  });
+  const [pendingProgramId, setPendingProgramId] = useState<string | null>(null);
+  const [isRepeatSchedule, setIsRepeatSchedule] = useState(true);
+  const [customScheduleStartDate, setCustomScheduleStartDate] = useState<string>(() => {
+    return localStorage.getItem('sovereign_custom_schedule_start_date') || format(new Date(), 'yyyy-MM-dd');
+  });
+  const [isRoadmapOpen, setIsRoadmapOpen] = useState(false);
+  const [isProtocolDropdownOpen, setIsProtocolDropdownOpen] = useState(false);
+  const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [nutritionStartDate, setNutritionStartDate] = useState<string>(() => {
     const saved = localStorage.getItem('sovereign_nutrition_start_date');
     return saved ? saved : format(new Date(), 'yyyy-MM-dd');
@@ -316,6 +330,15 @@ function App() {
   });
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [weightInput, setWeightInput] = useState<string>('');
+  const [bodyFat, setBodyFat] = useState<number>(() => {
+    const saved = localStorage.getItem('sovereign_body_fat');
+    return saved ? parseFloat(saved) : 15;
+  });
+  const [bodyFatInput, setBodyFatInput] = useState<string>('');
+  const [cardioCompleted, setCardioCompleted] = useState<boolean>(() => {
+    const saved = localStorage.getItem('sovereign_cardio_completed');
+    return saved === 'true';
+  });
   const [weightHistory, setWeightHistory] = useState<WeightEntry[]>(() => {
     try {
       const saved = localStorage.getItem('sovereign_weight_history');
@@ -325,16 +348,38 @@ function App() {
     }
   });
 
-  // Auto-calculate calories based on weight and goal
+  // Adaptive Caloric Engine
   useEffect(() => {
-    if (isAutoCalories) {
-      const maintenance = Math.round(currentWeight * 33);
-      let target = maintenance;
-      if (nutritionGoal === 'BULK') target += 400;
-      else if (nutritionGoal === 'CUT') target -= 500;
-      setCalories(target);
+    if (isAutoCalories && weightHistory.length >= 7) {
+      const sortedHistory = [...weightHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const recentWeights = sortedHistory.slice(0, 7);
+      
+      if (recentWeights.length === 7) {
+        const avgRecent = recentWeights.reduce((acc, curr) => acc + curr.weight, 0) / 7;
+        const olderWeights = sortedHistory.slice(7, 14);
+        
+        if (olderWeights.length === 7) {
+          const avgOlder = olderWeights.reduce((acc, curr) => acc + curr.weight, 0) / 7;
+          const weeklyChange = avgRecent - avgOlder;
+          
+          let adjustment = 0;
+          if (nutritionGoal === 'CUT') {
+            // Target: -0.5kg to -1kg per week
+            if (weeklyChange > -0.3) adjustment = -100; // Not losing fast enough
+            else if (weeklyChange < -1.2) adjustment = 100; // Losing too fast
+          } else if (nutritionGoal === 'BULK') {
+            // Target: +0.25kg to +0.5kg per week
+            if (weeklyChange < 0.1) adjustment = 100; // Not gaining enough
+            else if (weeklyChange > 0.6) adjustment = -100; // Gaining too much fat
+          }
+          
+          if (adjustment !== 0) {
+            setCalories(prev => prev + adjustment);
+          }
+        }
+      }
     }
-  }, [currentWeight, nutritionGoal, isAutoCalories]);
+  }, [weightHistory, nutritionGoal, isAutoCalories]);
 
   // Keep schedule phase in sync with nutrition goal
   useEffect(() => {
@@ -550,6 +595,8 @@ function App() {
         localStorage.setItem('sovereign_nutrition_duration_weeks', (nutritionDurationWeeks ?? 12).toString());
         localStorage.setItem('sovereign_calories', (calories ?? 2500).toString());
         localStorage.setItem('sovereign_auto_calories', (isAutoCalories ?? true).toString());
+        localStorage.setItem('sovereign_body_fat', (bodyFat ?? 15).toString());
+        localStorage.setItem('sovereign_cardio_completed', (cardioCompleted ?? false).toString());
         localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory ?? []));
         if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
       } catch (err) {
@@ -591,7 +638,7 @@ function App() {
     }
   };
   const [activeTab, setActiveTab] = useState('Daily Quest');
-  const [selectedDay, setSelectedDay] = useState('Monday');
+  const [selectedDay, setSelectedDay] = useState('Day 1');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [newExercise, setNewExercise] = useState({ name: '', target: '', weight: '', reps: 0, sets: '' });
   const [timer, setTimer] = useState(0);
@@ -622,6 +669,8 @@ function App() {
     return "A Blue Whale (approx. 150,000+ KG)";
   };
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
+  const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
+  const [expandedScheduleExercises, setExpandedScheduleExercises] = useState<string[]>([]);
   const [editingArchiveEntry, setEditingArchiveEntry] = useState<ArchiveEntry | null>(null);
 
   const handleEditArchive = (entry: ArchiveEntry) => {
@@ -806,16 +855,45 @@ function App() {
   // Persistence Effects
   // Data is automatically saved to localStorage whenever state changes.
 
+  // Auto-update program schedule when week changes
+  useEffect(() => {
+    if (selectedProgramId && programStartDate) {
+      const currentWeek = getProgramCurrentCycle();
+      const program = PROGRAMS.find(p => p.id === selectedProgramId);
+      if (program) {
+        // Check if we need to update based on current week
+        // We re-apply the program to ensure the schedule matches the current week's data
+        applyProgram(selectedProgramId, weakpointFocus, programStartDate);
+      }
+    }
+  }, [selectedProgramId, programStartDate, weakpointFocus]);
+
   const syncWorkoutWithSchedule = useCallback(() => {
-    const today = new Date();
-    const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
-    const todaySchedule = schedule.find(s => s.day === currentDayName);
+    const currentDayName = getProgramCurrentDay();
+    const currentWeekNum = getProgramCurrentCycle();
+    
+    const weekSchedule = schedule[currentWeekNum] || schedule[1] || [];
+    const todaySchedule = weekSchedule.find(s => s.day === currentDayName);
+
     if (todaySchedule) {
+      if (!selectedProgramId && !isRepeatSchedule) {
+        try {
+          const today = new Date();
+          const start = parseISO(customScheduleStartDate);
+          const diffDays = differenceInDays(today, start);
+          if (diffDays >= 10) {
+            setWorkout([]);
+            return;
+          }
+        } catch (e) {
+          // Fallback
+        }
+      }
       setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
     } else {
       setWorkout([]);
     }
-  }, [schedule, applyDeloadIfNecessary]);
+  }, [schedule, applyDeloadIfNecessary, selectedProgramId, programStartDate, weakpointFocus, isRepeatSchedule, customScheduleStartDate]);
 
   // Daily Reset & Violation Check
   useEffect(() => {
@@ -837,7 +915,22 @@ function App() {
           const dayName = DAYS[checkDate.getDay() === 0 ? 6 : checkDate.getDay() - 1];
           
           const hasEntry = archive.some(entry => entry.date === dateStr);
-          const daySchedule = schedule.find(s => s.day === dayName);
+          
+          // Calculate which week this date falls into
+          let weekNum = 1;
+          if (selectedProgramId && programStartDate) {
+            try {
+              const start = parseISO(programStartDate);
+              const diffDays = differenceInDays(checkDate, start);
+              if (diffDays >= 0) {
+                weekNum = Math.floor(diffDays / 7) + 1;
+              }
+            } catch (e) {
+              // fallback
+            }
+          }
+          const weekSchedule = schedule[weekNum] || schedule[1] || [];
+          const daySchedule = weekSchedule.find(s => s.day === dayName);
           const isRestDay = !daySchedule || daySchedule.exercises.length === 0;
           
           if (!hasEntry && !isRestDay) {
@@ -846,8 +939,9 @@ function App() {
               id: entryId,
               date: dateStr,
               day: dayName,
-              type: 'INCOMPLETE',
-              details: `Protocol Violation: Missed ${dayName} Cycle (Auto-Logged)`,
+              type: 'BREACH',
+              details: `Protocol Breach: Missed ${dayName} Cycle (Auto-Logged)`,
+              cardioCompleted: false
             });
           } else if (!hasEntry && isRestDay) {
             // Log a rest day entry so we don't keep checking it
@@ -858,6 +952,7 @@ function App() {
               day: dayName,
               type: 'COMPLETED',
               details: `Rest Day: ${dayName} Recovery Protocol`,
+              cardioCompleted: true // Rest days assume cardio is optional or done
             });
           }
           
@@ -885,10 +980,11 @@ function App() {
 
   // Sync today's workout with schedule changes
   useEffect(() => {
-    if (schedule.length === 0) return;
-    const today = new Date();
-    const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
-    const todaySchedule = schedule.find(s => s.day === currentDayName);
+    if (Object.keys(schedule).length === 0) return;
+    const currentDayName = getProgramCurrentDay();
+    const currentWeekNum = getProgramCurrentCycle();
+    const weekSchedule = schedule[currentWeekNum] || schedule[1] || [];
+    const todaySchedule = weekSchedule.find(s => s.day === currentDayName);
     
     if (todaySchedule) {
       setWorkout(prev => {
@@ -992,22 +1088,23 @@ function App() {
     const workoutIds = workout.map(ex => ex.id).sort().join(',');
     const currentProgress = workout.length > 0 ? Math.round((workout.filter(ex => ex.completed).length / workout.length) * 100) : 100;
 
-    if (entryIds !== workoutIds || todayEntry.progress !== currentProgress) {
+    if (entryIds !== workoutIds || todayEntry.progress !== currentProgress || todayEntry.cardioCompleted !== cardioCompleted) {
       setArchive(prev => {
         const filtered = prev.filter(e => e.date !== todayStr);
         const updatedEntry: ArchiveEntry = {
           ...todayEntry,
           exercises: [...workout],
           progress: currentProgress,
-          type: currentProgress === 100 ? 'COMPLETED' : 'INCOMPLETE',
-          details: currentProgress === 100 
+          cardioCompleted: cardioCompleted,
+          type: (currentProgress === 100 && cardioCompleted) ? 'COMPLETED' : 'BREACH',
+          details: (currentProgress === 100 && cardioCompleted)
             ? `Protocol Secured: ${todayEntry.day} Cycle` 
-            : `Protocol Partial: ${todayEntry.day} Cycle (${currentProgress}%)`
+            : `Protocol Breach: ${todayEntry.day} Cycle (${currentProgress}% Progress, Cardio: ${cardioCompleted ? 'OK' : 'MISSING'})`
         };
         return [updatedEntry, ...filtered];
       });
     }
-  }, [workout, archive]);
+  }, [workout, archive, cardioCompleted]);
 
   const logWorkout = useCallback(() => {
     const today = new Date();
@@ -1040,7 +1137,8 @@ function App() {
   }, [workout, timer]);
 
   const completedCount = workout.filter(item => item.completed).length;
-  const progress = workout.length > 0 ? Math.round((completedCount / workout.length) * 100) : 100;
+  const workoutProgress = workout.length > 0 ? (workout.filter(ex => ex.completed).length / workout.length) * 100 : 100;
+  const progress = Math.round((workoutProgress * 0.8) + (cardioCompleted ? 20 : 0));
   const isRestDay = workout.length === 0;
   
   // Handle rest day state
@@ -1115,6 +1213,18 @@ function App() {
     setTimer(0);
   };
 
+  const toggleExpandedExercise = (id: string) => {
+    setExpandedExercises(prev => 
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    );
+  };
+
+  const toggleExpandedScheduleExercise = (id: string) => {
+    setExpandedScheduleExercises(prev => 
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    );
+  };
+
   const toggleComplete = (id: string) => {
     if (!isTimerActive) {
       setIsTimerActive(true);
@@ -1164,6 +1274,19 @@ function App() {
     }));
   };
 
+  const getExerciseVideoUrl = (exName: string) => {
+    if (!selectedProgramId) return null;
+    const program = PROGRAMS.find(p => p.id === selectedProgramId);
+    if (!program) return null;
+    for (const range in program.weeks) {
+      for (const day in program.weeks[range].days) {
+        const exercise = program.weeks[range].days[day].find(e => e.name === exName);
+        if (exercise && exercise.videoUrl) return exercise.videoUrl;
+      }
+    }
+    return null;
+  };
+
   const getOverloadSuggestion = (exerciseName: string) => {
     const history = archive
       .filter(e => e.exercises)
@@ -1201,6 +1324,110 @@ function App() {
     };
   };
 
+  const getProgramCurrentCycle = () => {
+    if (!programStartDate) return 1;
+    try {
+      const start = parseISO(programStartDate);
+      const now = new Date();
+      const diffDays = differenceInDays(now, start);
+      return Math.max(1, Math.floor(diffDays / 10) + 1);
+    } catch (e) {
+      return 1;
+    }
+  };
+
+  const getProgramCurrentDay = () => {
+    if (!programStartDate) return 'Day 1';
+    try {
+      const start = parseISO(programStartDate);
+      const now = new Date();
+      const diffDays = differenceInDays(now, start);
+      const dayIndex = diffDays % 10;
+      return DAYS[dayIndex];
+    } catch (e) {
+      return 'Day 1';
+    }
+  };
+
+  const applyProgram = (programId: string, weakpoint: string | null, startDate: string = format(new Date(), 'yyyy-MM-dd')) => {
+    const program = PROGRAMS.find(p => p.id === programId);
+    if (!program) return;
+
+    // Set basic program state
+    setSelectedProgramId(programId);
+    setWeakpointFocus(weakpoint);
+    setProgramStartDate(startDate);
+    
+    localStorage.setItem('sovereign_selected_program_id', programId);
+    localStorage.setItem('sovereign_program_start_date', startDate);
+    if (weakpoint) localStorage.setItem('sovereign_weakpoint_focus', weakpoint);
+    else localStorage.removeItem('sovereign_weakpoint_focus');
+
+    const newWeeklySchedule: WeeklySchedule = {};
+    
+    // Generate all weeks for the program
+    for (let w = 1; w <= program.totalWeeks; w++) {
+      let weekData = null;
+      for (const range in program.weeks) {
+        const [start, end] = range.split('-').map(Number);
+        if (end) {
+          if (w >= start && w <= end) {
+            weekData = program.weeks[range];
+            break;
+          }
+        } else if (w === start) {
+          weekData = program.weeks[range];
+          break;
+        }
+      }
+      
+      if (!weekData) {
+        const firstRange = Object.keys(program.weeks)[0];
+        weekData = program.weeks[firstRange];
+      }
+
+      newWeeklySchedule[w] = DAYS.map(day => {
+        const mappedDay = dayMapping[day] || day;
+        const baseExercises = weekData.days[mappedDay] || [];
+        const weakpointExercises = weakpoint && program.weakpointAdditions?.[weakpoint]?.[mappedDay] || [];
+        
+        const combinedExercises: WorkoutItem[] = [...baseExercises, ...weakpointExercises].map(ex => ({
+          ...ex,
+          id: Math.random().toString(36).substr(2, 9),
+          completed: false
+        }));
+
+        return {
+          day,
+          exercises: combinedExercises
+        };
+      });
+    }
+
+    setSchedule(newWeeklySchedule);
+    localStorage.setItem('sovereign_schedule', JSON.stringify(newWeeklySchedule));
+    setCurrentWeekTab(getProgramCurrentCycle());
+    syncWorkoutWithSchedule();
+  };
+
+  const applyCustomSchedule = () => {
+    if (confirm('Are you sure you want to reset your schedule? This will remove the current program.')) {
+      setSelectedProgramId(null);
+      setWeakpointFocus(null);
+      
+      const newSchedule: WeeklySchedule = {};
+      for (let i = 1; i <= programDuration; i++) {
+        newSchedule[i] = JSON.parse(JSON.stringify(INITIAL_SCHEDULE));
+      }
+      
+      setSchedule(newSchedule);
+      localStorage.removeItem('sovereign_selected_program_id');
+      localStorage.removeItem('sovereign_weakpoint_focus');
+      localStorage.setItem('sovereign_schedule', JSON.stringify(newSchedule));
+      setIsProtocolDropdownOpen(false);
+    }
+  };
+
   const addExerciseToSchedule = () => {
     if (!newExercise.name) return;
     
@@ -1217,28 +1444,60 @@ function App() {
       completed: false
     };
 
-    setSchedule(prev => prev.map(d => 
-      d.day === selectedDay ? { ...d, exercises: [...d.exercises, exercise] } : d
-    ));
+    setSchedule(prev => {
+      const currentWeekSchedule = prev[currentWeekTab] || INITIAL_SCHEDULE;
+      const updatedWeekSchedule = currentWeekSchedule.map(d => 
+        d.day === selectedDay ? { ...d, exercises: [...d.exercises, exercise] } : d
+      );
+      return {
+        ...prev,
+        [currentWeekTab]: updatedWeekSchedule
+      };
+    });
     setNewExercise({ name: '', target: '', weight: '', reps: 0, sets: '' });
   };
 
   const removeExerciseFromSchedule = (day: string, id: string) => {
-    setSchedule(prev => prev.map(d => 
-      d.day === day ? { ...d, exercises: d.exercises.filter(e => e.id !== id) } : d
-    ));
+    setSchedule(prev => {
+      const currentWeekSchedule = prev[currentWeekTab] || INITIAL_SCHEDULE;
+      const updatedWeekSchedule = currentWeekSchedule.map(d => 
+        d.day === day ? { ...d, exercises: d.exercises.filter(e => e.id !== id) } : d
+      );
+      return {
+        ...prev,
+        [currentWeekTab]: updatedWeekSchedule
+      };
+    });
   };
 
   const clearArchive = () => {
     setArchive([]);
     setWorkout([]);
-    setSchedule(INITIAL_SCHEDULE);
+    
+    const newSchedule: WeeklySchedule = {};
+    for (let i = 1; i <= programDuration; i++) {
+      newSchedule[i] = JSON.parse(JSON.stringify(INITIAL_SCHEDULE));
+    }
+    
+    setSchedule(newSchedule);
     setExp(0);
     setLastChecked(null);
     localStorage.clear();
     setShowPurgeModal(false);
   };
 
+  // Update schedule when week changes
+  useEffect(() => {
+    if (selectedProgramId) {
+      const currentWeek = getProgramCurrentCycle();
+      const lastWeek = parseInt(localStorage.getItem('sovereign_last_week') || '0');
+      
+      if (currentWeek !== lastWeek) {
+        applyProgram(selectedProgramId, weakpointFocus, programStartDate);
+        localStorage.setItem('sovereign_last_week', currentWeek.toString());
+      }
+    }
+  }, [selectedProgramId, programStartDate, weakpointFocus]);
   const calculateStreak = () => {
     if (archive.length === 0) return 0;
     
@@ -1304,7 +1563,7 @@ function App() {
     // Completion Rate
     const totalProgress = filteredArchive.reduce((acc, entry) => {
       if (entry.type === 'COMPLETED') return acc + 100;
-      if (entry.type === 'INCOMPLETE') return acc + (entry.progress || 0);
+      if (entry.type === 'BREACH' || entry.type === 'INCOMPLETE') return acc + (entry.progress || 0);
       return acc;
     }, 0);
     const avgCompletion = Math.round(totalProgress / filteredArchive.length);
@@ -1332,38 +1591,45 @@ function App() {
   }, [archive, currentRank, selectedArchiveDate]);
 
   return (
-    <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+    <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container relative overflow-x-hidden">
+      {/* Global HUD Overlays */}
+      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+        <div className="absolute inset-0  opacity-[0.03]"></div>
+        <div className="absolute top-0 left-0 w-full h-1 bg-primary-container/10 animate-pulse"></div>
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-primary-container/10 animate-pulse"></div>
+      </div>
+
       {/* Top Navigation */}
       <nav className="fixed top-0 w-full z-50 border-b border-primary-container/15 bg-background/80 backdrop-blur-xl flex justify-between items-center px-4 md:px-8 py-4">
-        <div className="text-sm md:text-2xl font-black tracking-widest text-primary-container glow-text-primary font-headline uppercase">
+        <div className="text-sm md:text-2xl font-bold  text-primary-container glow-text-primary font-sans font-semibold ">
           THE SOVEREIGN PROTOCOL
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex space-x-8 font-headline uppercase text-[10px] tracking-[0.2em]">
+          <div className="hidden md:flex space-x-8 font-sans font-semibold  text-sm ">
             {['Daily Quest', 'Workout Archive', 'Schedule', 'User Stats', 'Nutrition'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`transition-all hover:text-primary-container ${activeTab === tab ? 'text-primary-container font-black' : 'text-on-surface-variant'}`}
+                className={`transition-all hover:text-primary-container ${activeTab === tab ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}
               >
                 {tab}
               </button>
             ))}
           </div>
           
-          <div className="flex items-center gap-3 border-l border-outline-variant/20 pl-4">
+          <div className="flex items-center gap-3 border-l border-white/5 pl-4">
             {authError && (
               <div className="hidden md:flex items-center gap-2 bg-error/10 border border-error/30 px-3 py-1.5 mr-2">
                 <AlertTriangle className="w-3 h-3 text-error" />
-                <span className="text-[8px] font-black text-error uppercase tracking-widest">{authError}</span>
+                <span className="text-xs font-bold text-error  ">{authError}</span>
                 <button onClick={() => setAuthError(null)} className="text-error hover:text-white ml-2">×</button>
               </div>
             )}
             {user ? (
               <div className="flex items-center gap-3">
                 <div className="hidden md:block text-right">
-                  <div className="text-[8px] font-black text-primary-container uppercase tracking-widest leading-none mb-1">Operator</div>
-                  <div className="text-[10px] font-headline text-on-surface uppercase tracking-tight">{user.displayName || 'OPERATOR_01'}</div>
+                  <div className="text-xs font-bold text-primary-container   leading-none mb-1">Operator</div>
+                  <div className="text-sm font-sans font-semibold text-on-surface  ">{user.displayName || 'OPERATOR_01'}</div>
                 </div>
                 <button 
                   onClick={handleLogout}
@@ -1383,7 +1649,7 @@ function App() {
                 className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-3 py-1.5 hover:bg-primary-container/20 transition-all"
               >
                 <LogIn className="w-4 h-4 text-primary-container" />
-                <span className="font-headline text-[10px] font-black text-primary-container uppercase tracking-widest">Login</span>
+                <span className="font-sans font-semibold text-sm font-bold text-primary-container  ">Login</span>
               </button>
             )}
           </div>
@@ -1395,8 +1661,8 @@ function App() {
           {/* Sidebar Navigation */}
           <aside className={`hidden md:flex fixed left-0 top-0 h-full w-64 z-40 border-r border-primary-container/10 bg-[#0e0e0e] flex-col py-20 px-4 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
             <div className="mb-12 px-4">
-              <div className="text-primary-container font-black font-headline text-[10px] uppercase tracking-[0.2em]">RANK: {currentRank.name}</div>
-              <div className="text-on-surface-variant font-headline text-[8px] tracking-[0.2em]">{currentRank.title} ACTIVE</div>
+              <div className="text-primary-container font-bold font-sans font-semibold text-sm  ">RANK: {currentRank.name}</div>
+              <div className="text-on-surface-variant font-sans font-semibold text-xs ">{currentRank.title} ACTIVE</div>
             </div>
             
             <div className="space-y-2 flex-grow">
@@ -1406,14 +1672,15 @@ function App() {
                 { name: 'Schedule', icon: CalendarIcon },
                 { name: 'User Stats', icon: BarChart3 },
                 { name: 'Nutrition', icon: Utensils },
+                { name: 'Video Library', icon: Youtube },
               ].map((item) => (
                 <button
                   key={item.name}
                   onClick={() => setActiveTab(item.name)}
-                  className={`w-full flex items-center space-x-3 p-3 font-headline text-[10px] font-bold uppercase tracking-[0.2em] transition-all hover:translate-x-1 ${
+                  className={`w-full flex items-center space-x-3 p-3 font-sans font-semibold text-sm font-bold   transition-all hover:translate-x-1 ${
                     activeTab === item.name
-                      ? 'text-primary-container bg-surface-container-low border-l-4 border-primary-container' 
-                      : 'text-on-surface-variant/50 hover:text-on-surface hover:bg-surface-container-high'
+                      ? 'text-primary-container bg-[#1c1c1e] border-l-4 border-primary-container' 
+                      : 'text-on-surface-variant/50 hover:text-on-surface hover:bg-[#2c2c2e]'
                   }`}
                 >
                   <item.icon className="w-4 h-4" />
@@ -1424,12 +1691,12 @@ function App() {
 
             <button 
               onClick={startWorkout}
-              className="mt-8 bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-widest uppercase hover:brightness-125 transition-all active:scale-95"
+              className="mt-8 bg-primary-container text-on-primary-container py-4 font-sans font-semibold text-sm font-bold   hover:brightness-125 transition-all active:scale-95"
             >
               INITIALIZE WORKOUT
             </button>
 
-            <div className="mt-auto px-4 pt-8 border-t border-outline-variant/10">
+            <div className="mt-auto px-4 pt-8 border-t border-white/5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   {isSyncing ? (
@@ -1439,14 +1706,14 @@ function App() {
                   ) : (
                     <CloudOff className="w-3 h-3 text-on-surface-variant/30" />
                   )}
-                  <span className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest">
+                  <span className="font-label text-[7px] text-on-surface-variant  ">
                     {isSyncing ? 'Syncing...' : user ? 'Cloud Active' : 'Offline Mode'}
                   </span>
                 </div>
                 {syncError && (
                   <div className="flex items-center gap-1 text-error">
                     <AlertTriangle className="w-2 h-2" />
-                    <span className="text-[6px] uppercase">{syncError}</span>
+                    <span className="text-[6px] ">{syncError}</span>
                   </div>
                 )}
               </div>
@@ -1458,245 +1725,118 @@ function App() {
           <main className="md:ml-64 pt-20 md:pt-24 pb-32 md:pb-12 px-4 md:px-8">
         <div className="max-w-6xl mx-auto space-y-4 md:space-y-12">
           {activeTab === 'Daily Quest' && (
-            <>
-              {/* Alert Banner */}
-              <motion.section 
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`relative p-4 md:p-6 overflow-hidden border-l-4 ${
-                  isRestDay
-                    ? 'bg-primary-container/5 border-primary-container/30'
-                    : progress === 100 
-                    ? 'bg-primary-container/10 border-primary-container' 
-                    : 'bg-error-container/20 border-error'
-                }`}
-              >
-                <div className="absolute top-0 right-0 p-2 opacity-5">
-                  {isRestDay ? (
-                    <Shield className="w-24 h-24 md:w-32 md:h-32 text-primary-container" />
-                  ) : progress === 100 ? (
-                    <CheckCircle2 className="w-24 h-24 md:w-32 md:h-32 text-primary-container" />
-                  ) : (
-                    <AlertTriangle className="w-24 h-24 md:w-32 md:h-32 text-error" />
-                  )}
+            <div className="space-y-6">
+              {isRestDay ? (
+                <div className="flex flex-col items-center justify-center py-20 border border-dashed border-emerald-500/20 bg-[#1c1c1e]/20 rounded-3xl">
+                  <Shield className="w-16 h-16 text-emerald-500/20 mb-4" />
+                  <h3 className="font-sans font-semibold text-lg font-bold text-emerald-400">Rest Day Active</h3>
+                  <p className="text-sm text-on-surface-variant/60 mt-2">No objectives assigned for this cycle.</p>
+                  <button 
+                    onClick={() => setActiveTab('Schedule')}
+                    className="mt-6 text-emerald-400 font-sans font-semibold text-sm font-bold hover:underline"
+                  >
+                    Modify Schedule
+                  </button>
                 </div>
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
+              ) : (
+                <div className="space-y-8">
+                  {/* Cardio Section */}
                   <div>
-                    <h2 className={`font-headline font-black text-lg md:text-xl tracking-tighter uppercase flex items-center gap-2 ${
-                      isRestDay ? 'text-primary-container/60' : progress === 100 ? 'text-primary-container' : 'text-error'
-                    }`}>
-                      {isRestDay ? (
-                        <>
-                          <Shield className="w-4 h-4 md:w-5 md:h-5" />
-                          RECOVERY PROTOCOL
-                        </>
-                      ) : progress === 100 ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
-                          PROTOCOL COMPLETED
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
-                          PROTOCOL BREACH
-                        </>
-                      )}
-                      {getDeloadStatus().isDeloadWeek && !isRestDay && (
-                        <span className="bg-emerald-500/20 text-emerald-500 text-[8px] px-2 py-0.5 border border-emerald-500/30 tracking-[0.2em] ml-2">
-                          DELOAD ACTIVE
-                        </span>
-                      )}
-                    </h2>
-                    <p className={`mt-1 text-xs md:text-sm ${isRestDay ? 'text-on-surface-variant' : progress === 100 ? 'text-on-surface' : 'text-on-error-container'}`}>
-                      {isRestDay ? (
-                        <>No active objectives. System in standby mode. Rank: {currentRank.name}.</>
-                      ) : progress === 100 ? (
-                        <>Objectives secured. Rank: {currentRank.name}.</>
-                      ) : (
-                        <>Incomplete. Breach in <span className="font-mono font-bold">{timeLeftInDay}</span>. Rank: {currentRank.name}.</>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </motion.section>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-sans font-semibold text-base md:text-lg font-bold text-primary-container flex items-center gap-2 md:gap-3">
+                        <Activity className="w-4 h-4 md:w-5 md:h-5" />
+                        Cardio Protocol
+                      </h3>
+                    </div>
 
-              {/* Dashboard Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-4 md:pb-6 gap-4 md:gap-6">
-                  <div>
-                    <span className="font-label text-primary-container text-[8px] md:text-[10px] tracking-[0.4em] uppercase">Current Operation</span>
-                    <h1 className="font-headline text-2xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-1 md:mt-2">The Daily Quest</h1>
-                  </div>
-                  <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
-                    <div className="w-full md:w-auto text-left md:text-right">
-                      <div className="font-label text-on-surface-variant text-[8px] md:text-[10px] tracking-[0.2em] uppercase mb-1 md:mb-2">Completion Status</div>
-                      <div className="flex items-center gap-3 md:gap-4">
-                        <span className="font-headline text-xl md:text-3xl font-bold text-primary-container">{progress}%</span>
-                        <div className="flex-grow md:w-64 h-2 md:h-3 bg-surface-container-highest relative overflow-hidden">
-                          <div className="absolute inset-0 scanline-overlay z-10"></div>
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            className="h-full bg-gradient-to-r from-primary to-primary-container shadow-[0_0_10px_rgba(0,229,255,0.4)]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              {/* Bento Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
-                {/* Rank Progress Card (Mobile First) */}
-                <div className="lg:hidden">
-                  <div className="bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-4 relative group overflow-hidden">
-                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                      <BarChart3 className="w-32 h-32 text-primary-container" />
-                    </div>
-                    <div className="relative z-10">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-[0.2em]">Rank Standing</div>
-                          <div className="font-headline text-2xl font-black text-primary-container glow-text-primary">{currentRank.name}</div>
-                        </div>
-                        <div className="bg-primary-container/10 px-2 py-1 border border-primary-container/20">
-                          <span className="font-mono text-[8px] text-primary-container">{currentRank.title}</span>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between font-label text-[7px] text-on-surface-variant uppercase">
-                          <span>{nextRank ? `XP to Rank ${nextRank.name}` : 'MAX RANK'}</span>
-                          <span>{exp.toLocaleString()} / {nextRank ? nextRank.min.toLocaleString() : 'MAX'}</span>
-                        </div>
-                        <div className="w-full h-1 bg-surface-container-highest">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${rankProgress}%` }}
-                            className="h-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.6)]" 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Nutrition Status Card (Mobile First) */}
-                <div className="lg:hidden">
-                  <div className="bg-surface-container-low p-4 border border-outline-variant/10 relative group overflow-hidden">
-                    <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                      <Utensils className="w-32 h-32 text-primary-container" />
-                    </div>
-                    <div className="relative z-10">
-                      <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-[0.2em] mb-1">Nutrition Protocol</div>
-                      <div className="font-headline text-2xl font-black text-primary-container glow-text-primary">{nutritionGoal}</div>
-                      <div className="mt-4 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Protein Target</span>
-                          <span className="font-mono text-sm text-on-surface font-bold">{proteinRequirement}G</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Current Weight</span>
-                          <span className="font-mono text-sm text-on-surface">{currentWeight} KG</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Workout Checklist */}
-                <div className="lg:col-span-2 space-y-4 md:space-y-6">
-                  {!isWorkoutActive ? (
-                    <div className="flex flex-col items-center justify-center py-20 border border-dashed border-outline-variant/20 bg-surface-container-low/20">
-                      {progress === 100 && workout.length > 0 ? (
-                        <>
-                          <CheckCircle2 className="w-16 h-16 text-emerald-500/40 mb-4" />
-                          <h3 className="font-headline text-lg font-black text-emerald-400 uppercase tracking-widest">Protocol Secured</h3>
-                          <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2 text-center px-8">
-                            All objectives for this cycle have been met. System in post-mission standby.
-                          </p>
-                          <button 
-                            onClick={() => startWorkout(true)}
-                            className="mt-6 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-8 py-3 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:bg-emerald-500/20 transition-all"
-                          >
-                            Re-Initialize Protocol
-                          </button>
-                        </>
-                      ) : progress > 0 ? (
-                        <>
-                          <TrendingUp className="w-16 h-16 text-primary-container/40 mb-4" />
-                          <h3 className="font-headline text-lg font-black text-primary-container uppercase tracking-widest">Protocol In Progress</h3>
-                          <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2 text-center px-8">
-                            Partial objectives met. System awaiting completion or re-initialization.
-                          </p>
-                          <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                            <button 
-                              onClick={() => startWorkout(false)}
-                              className="bg-primary-container text-on-primary-container px-8 py-3 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-110 transition-all"
-                            >
-                              Resume Protocol
-                            </button>
-                            <button 
-                              onClick={() => startWorkout(true)}
-                              className="bg-surface-container-high text-on-surface-variant border border-outline-variant/20 px-8 py-3 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:bg-surface-container-highest transition-all"
-                            >
-                              Reset Protocol
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-16 h-16 text-primary-container/20 mb-4" />
-                          <h3 className="font-headline text-lg font-black text-on-surface-variant uppercase tracking-widest">Protocol Locked</h3>
-                          <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2 text-center px-8">
-                            {isRestDay ? 'System in standby mode. No objectives assigned.' : 'Initialize workout to unlock today\'s objectives.'}
-                          </p>
-                          <button 
-                            onClick={() => startWorkout(false)}
-                            className="mt-6 bg-primary-container text-on-primary-container px-8 py-3 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-110 transition-all"
-                          >
-                            Initialize Workout
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ) : isRestDay ? (
-                    <div className="flex flex-col items-center justify-center py-20 border border-dashed border-emerald-500/20 bg-surface-container-low/20">
-                      <Shield className="w-16 h-16 text-emerald-500/20 mb-4" />
-                      <h3 className="font-headline text-lg font-black text-emerald-400 uppercase tracking-widest">Rest Day Active</h3>
-                      <p className="text-[10px] text-on-surface-variant/60 uppercase tracking-widest mt-2">No objectives assigned for this cycle.</p>
-                      <button 
-                        onClick={() => setActiveTab('Schedule')}
-                        className="mt-6 text-emerald-400 font-headline text-[10px] font-black uppercase tracking-[0.2em] hover:underline"
+                      <div 
+                        className={`group flex flex-col transition-all rounded-2xl mb-4 ${
+                          cardioCompleted 
+                            ? 'bg-primary-container/10 border border-primary-container shadow-[0_0_15px_rgba(0,229,255,0.1)]' 
+                            : 'bg-[#1c1c1e] hover:bg-[#2c2c2e] border border-white/5'
+                        }`}
                       >
-                        Modify Schedule
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {workout.some(item => !item.completed && getOverloadSuggestion(item.name)) && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-primary-container/5 border border-primary-container/30 p-4 flex items-start gap-4"
+                        <div 
+                          className="p-4 flex items-center justify-between cursor-pointer"
+                          onClick={() => setExpandedExercises(prev => prev.includes('cardio') ? prev.filter(e => e !== 'cardio') : [...prev, 'cardio'])}
                         >
-                          <div className="p-2 bg-primary-container/10">
-                            <TrendingUp className="w-5 h-5 text-primary-container" />
+                          <div className="flex items-center gap-4">
+                            <div className={`p-2 md:p-3 rounded-full transition-colors ${cardioCompleted ? 'bg-primary-container text-on-primary-container' : 'bg-[#2c2c2e]est text-on-surface-variant'}`}>
+                              <Activity className="w-5 h-5 md:w-6 md:h-6" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <div className={`font-sans font-semibold font-bold text-sm md:text-base ${cardioCompleted ? 'text-primary-container line-through' : 'text-on-surface'}`}>
+                                Treadmill Protocol
+                              </div>
+                              <div className="font-label text-xs text-on-surface-variant tracking-[0.1em]">
+                                30-45 Min LISS / HIIT
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-primary-container mb-1">System Recommendation: Progressive Overload</div>
-                            <p className="text-[10px] text-on-surface-variant uppercase leading-relaxed">
-                              Previous data detected. To maintain Rank progression, consider increasing intensity on highlighted exercises.
-                            </p>
+                          
+                          <div className="flex items-center gap-3">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setCardioCompleted(!cardioCompleted); }}
+                              className={`flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-xl transition-all ${
+                                cardioCompleted 
+                                  ? 'bg-primary-container text-on-primary-container shadow-[0_0_15px_rgba(0,229,255,0.4)]' 
+                                  : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
+                              }`}
+                            >
+                              {cardioCompleted ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : <Check className="w-4 h-4 md:w-5 md:h-5 text-primary-container" />}
+                            </button>
+                            <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${expandedExercises.includes('cardio') ? 'rotate-180' : ''}`} />
                           </div>
-                        </motion.div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-headline text-base md:text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-2 md:gap-3">
-                          <Bolt className="w-4 h-4 md:w-5 md:h-5" />
-                          Today's Workout
-                        </h3>
-                        <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant uppercase tracking-widest bg-surface-container-high px-2 md:px-3 py-1">
-                          Phase: Hypertrophy
                         </div>
+
+                        <AnimatePresence>
+                          {expandedExercises.includes('cardio') && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="p-4 pt-0 border-t border-white/5 mt-2">
+                                <div className="mb-3 p-2 bg-primary-container/10 border-l-2 border-primary-container text-xs text-on-surface leading-relaxed">
+                                  <span className="text-primary-container font-bold mr-1">NOTES:</span> Keep heart rate in Zone 2 for LISS, or alternate 1 min sprint / 1 min walk for HIIT.
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                  </div>
+
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <h3 className="font-sans font-semibold text-base md:text-lg font-bold   text-primary-container flex items-center gap-2 md:gap-3">
+                              <Bolt className="w-4 h-4 md:w-5 md:h-5" />
+                              Today's Workout
+                            </h3>
+                            {selectedProgramId && PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[getProgramCurrentDay()] && (
+                              <div className="mt-1 font-label text-sm text-primary-container/80 font-bold  ">
+                                {PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[getProgramCurrentDay()]}
+                              </div>
+                            )}
+                            <div className="mt-3 text-xs text-on-surface-variant bg-[#1c1c1e] p-3 rounded-xl border border-white/5 max-w-md">
+                              <span className="font-bold text-primary-container">RPE (Rate of Perceived Exertion):</span> 10 = Absolute failure (0 reps left), 9 = 1 rep left in tank, 8 = 2 reps left.
+                            </div>
+                          </div>
+                          <div className="font-label text-xs md:text-sm text-on-surface-variant bg-[#2c2c2e] px-3 py-1.5 rounded-lg">
+                            Phase: Hypertrophy
+                          </div>
+                        </div>
+
+                        {workout.length > 0 && (
+                          <div className="w-full bg-[#2c2c2e] h-2 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-primary-container transition-all duration-500 ease-out"
+                              style={{ width: `${(workout.filter(item => item.completed).length / workout.length) * 100}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-3 md:space-y-4">
@@ -1707,230 +1847,153 @@ function App() {
                               layout
                               initial={{ opacity: 0, x: -20 }}
                               animate={{ opacity: 1, x: 0 }}
-                              className={`group p-3 md:p-5 flex flex-col md:flex-row items-center gap-3 md:gap-6 transition-all border-l-2 ${
+                              className={`group flex flex-col transition-all rounded-2xl mb-3 ${
                                 item.completed 
-                                  ? 'bg-surface-container-low/50 opacity-60 border-primary-container' 
-                                  : 'bg-surface-container-low hover:bg-surface-container-high border-transparent hover:border-primary-container'
+                                  ? 'bg-[#1c1c1e]/50 opacity-60 border border-primary-container/30' 
+                                  : 'bg-[#1c1c1e] border border-white/5 hover:border-primary-container/30'
                               }`}
                             >
-                              <div className="flex-grow w-full md:w-auto">
-                                <div className={`font-headline font-bold uppercase tracking-tight text-sm md:text-lg flex flex-col gap-1 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
-                                  <div className="flex items-center gap-2">
+                              {/* Header / Summary (Always visible) */}
+                              <div 
+                                className="p-3 md:p-4 flex items-center justify-between cursor-pointer"
+                                onClick={() => toggleExpandedExercise(item.id)}
+                              >
+                                <div className="flex flex-col gap-1">
+                                  <div className={`font-sans font-semibold font-bold text-sm md:text-base flex items-center gap-2 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
                                     {item.name}
                                     {!item.completed && getOverloadSuggestion(item.name) && (
                                       <TrendingUp className="w-3 h-3 text-primary-container animate-pulse" />
                                     )}
                                   </div>
-                                  {!item.completed && getOverloadSuggestion(item.name) && (
-                                    <div className="bg-primary-container/10 border border-primary-container/20 p-2 mt-1">
-                                      <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1 flex items-center gap-1">
-                                        <Zap className="w-2 h-2" />
-                                        Progressive Overload Intel
-                                      </div>
-                                      <div className="text-[10px] text-on-surface uppercase leading-tight">
-                                        Target: <span className="text-primary-container font-bold">{getOverloadSuggestion(item.name)?.suggestion}</span>
-                                        <span className="text-on-surface-variant ml-2">(Previous: {getOverloadSuggestion(item.name)?.original})</span>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant tracking-[0.1em] uppercase">Target: {item.target}</div>
-                              </div>
-
-                              <div className="flex flex-col md:flex-row items-center justify-between md:justify-start gap-4 md:gap-6 w-full md:w-auto">
-                                <div className="flex flex-col gap-2 w-full md:w-auto">
-                                  {(item.setData || Array.from({ length: parseInt(item.sets) || 1 }, () => ({ weight: item.weight, reps: item.reps }))).map((set, idx) => (
-                                    <div key={idx} className="flex items-center gap-3 md:gap-4">
-                                      <span className="font-mono text-[8px] text-on-surface-variant w-4">#{idx + 1}</span>
-                                      <div className="flex flex-col items-center">
-                                        {idx === 0 && <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Weight</span>}
-                                        <input 
-                                          type="text"
-                                          value={set.weight}
-                                          onChange={(e) => updateWorkoutSet(item.id, idx, 'weight', e.target.value)}
-                                          className="w-12 md:w-16 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                                        />
-                                      </div>
-                                      <div className="flex flex-col items-center">
-                                        {idx === 0 && <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Reps</span>}
-                                        <input 
-                                          type="number"
-                                          value={set.reps}
-                                          onChange={(e) => updateWorkoutSet(item.id, idx, 'reps', parseInt(e.target.value) || 0)}
-                                          className="w-10 md:w-12 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-primary-container text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                                        />
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                <div className="flex items-center gap-4 md:gap-6">
-                                  <div className="flex flex-col items-center">
-                                    <span className="font-label text-[7px] md:text-[8px] text-on-surface-variant uppercase mb-1">Sets</span>
-                                    <input 
-                                      type="text"
-                                      value={item.sets}
-                                      onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
-                                      className="w-8 md:w-10 bg-surface-container-highest/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs md:text-sm text-center focus:outline-none focus:border-primary-container transition-colors"
-                                    />
+                                  <div className="font-label text-xs text-on-surface-variant tracking-[0.1em]">
+                                    {item.target} | {item.sets} Sets
                                   </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
                                   <button 
-                                    onClick={() => toggleComplete(item.id)}
-                                    className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 transition-all ${
+                                    onClick={(e) => { e.stopPropagation(); toggleComplete(item.id); }}
+                                    className={`flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-xl transition-all ${
                                       item.completed 
-                                        ? 'bg-primary-container text-on-primary-container shadow-[0_0_20px_rgba(0,229,255,0.4)]' 
+                                        ? 'bg-primary-container text-on-primary-container shadow-[0_0_15px_rgba(0,229,255,0.4)]' 
                                         : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
                                     }`}
                                   >
-                                    {item.completed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : <Check className="w-5 h-5 md:w-6 md:h-6 text-primary-container" />}
+                                    {item.completed ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : <Check className="w-4 h-4 md:w-5 md:h-5 text-primary-container" />}
                                   </button>
+                                  <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${expandedExercises.includes(item.id) ? 'rotate-180' : ''}`} />
                                 </div>
                               </div>
+
+                              {/* Expanded Content */}
+                              <AnimatePresence>
+                                {expandedExercises.includes(item.id) && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="p-3 md:p-4 pt-0 border-t border-white/5 mt-2">
+                                      {/* Action row: Video */}
+                                      {(item.videoUrl || getExerciseVideoUrl(item.name)) && (
+                                        <button 
+                                          onClick={() => setActiveVideoUrl((item.videoUrl || getExerciseVideoUrl(item.name))!)}
+                                          className="text-primary-container text-xs flex items-center gap-1 mb-3 hover:underline"
+                                        >
+                                          <Youtube className="w-3 h-3" /> Watch Tutorial
+                                        </button>
+                                      )}
+
+                                      {/* Overload Suggestion */}
+                                      {!item.completed && getOverloadSuggestion(item.name) && (
+                                        <div className="bg-primary-container/10 border border-primary-container/20 p-3 rounded-xl mb-3">
+                                          <div className="text-xs text-primary-container font-bold mb-1 flex items-center gap-1">
+                                            <Zap className="w-3 h-3" /> Progressive Overload Intel
+                                          </div>
+                                          <div className="text-xs text-on-surface">
+                                            Target: <span className="text-primary-container font-bold">{getOverloadSuggestion(item.name)?.suggestion}</span>
+                                            <span className="text-on-surface-variant ml-2">(Prev: {getOverloadSuggestion(item.name)?.original})</span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Notes */}
+                                      {item.notes && !item.completed && (
+                                        <div className="mb-3 p-3 bg-primary-container/10 border border-primary-container/20 rounded-xl text-xs text-on-surface leading-relaxed">
+                                          <span className="text-primary-container font-bold mr-1">NOTES:</span> {item.notes}
+                                        </div>
+                                      )}
+
+                                      {/* Sets Inputs */}
+                                      <div className="flex flex-col gap-2 mb-3">
+                                        {(item.setData || Array.from({ length: parseInt(item.sets) || 1 }, () => ({ weight: item.weight, reps: item.reps }))).map((set, idx) => (
+                                          <div key={idx} className="flex items-center gap-3 bg-[#2c2c2e]/50 p-3 rounded-xl">
+                                            <span className="font-mono text-xs text-on-surface-variant w-6">#{idx + 1}</span>
+                                            <div className="flex flex-col flex-1">
+                                              {idx === 0 && <span className="font-label text-[10px] text-on-surface-variant mb-1">Weight</span>}
+                                              <input 
+                                                type="text"
+                                                value={set.weight}
+                                                onChange={(e) => updateWorkoutSet(item.id, idx, 'weight', e.target.value)}
+                                                className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-sm focus:outline-none focus:border-primary-container transition-colors"
+                                              />
+                                            </div>
+                                            <div className="flex flex-col flex-1">
+                                              {idx === 0 && <span className="font-label text-[10px] text-on-surface-variant mb-1">Reps</span>}
+                                              <input 
+                                                type="number"
+                                                value={set.reps}
+                                                onChange={(e) => updateWorkoutSet(item.id, idx, 'reps', parseInt(e.target.value) || 0)}
+                                                className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-sm focus:outline-none focus:border-primary-container transition-colors"
+                                              />
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      {/* Sets count update */}
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <span className="font-label text-xs text-on-surface-variant">Total Sets:</span>
+                                        <input 
+                                          type="text"
+                                          value={item.sets}
+                                          onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
+                                          className="w-12 bg-[#2c2c2e]/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs text-center focus:outline-none focus:border-primary-container transition-colors"
+                                        />
+                                      </div>
+
+                                      {/* Substitutions */}
+                                      {item.substitutions && item.substitutions.length > 0 && !item.completed && (
+                                        <div className="flex flex-wrap gap-2">
+                                          <div className="text-[10px] text-on-surface-variant w-full mb-1">Substitutions:</div>
+                                          {item.substitutions.map((sub, idx) => (
+                                            <button
+                                              key={idx}
+                                              onClick={() => {
+                                                const updatedWorkout = workout.map(ex => 
+                                                  ex.id === item.id ? { ...ex, name: sub, substitutions: [item.name, ...item.substitutions.filter(s => s !== sub)] } : ex
+                                                );
+                                                setWorkout(updatedWorkout);
+                                              }}
+                                              className="text-[10px] bg-[#2c2c2e]/50 hover:bg-primary-container/20 text-on-surface-variant hover:text-primary-container px-3 py-1.5 rounded-lg border border-white/10 transition-all"
+                                            >
+                                              Swap: {sub}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </motion.div>
                           ))}
                         </AnimatePresence>
                       </div>
-                    </>
-                  )}
                 </div>
-
-                {/* Sidebar Modules */}
-                <div className="space-y-4 md:space-y-8">
-                  {/* Status HUD */}
-                  <div className="hidden md:block bg-surface-container-low/30 border border-outline-variant/10 p-4 md:p-6 space-y-3 md:space-y-4">
-                    {[
-                      { label: 'Protocol Duration', value: isRestDay ? 'RECOVERY' : formatTime(timer), color: isRestDay ? 'text-emerald-400' : 'text-primary-container', icon: isRestDay ? Shield : Terminal },
-                      { label: 'System Latency', value: '12ms', color: 'text-primary-container' },
-                      { label: 'Deload Status', value: getDeloadStatus().isDeloadWeek ? 'ACTIVE' : `W${getDeloadStatus().weekInCycle}/${programDuration}`, color: getDeloadStatus().isDeloadWeek ? 'text-emerald-500' : 'text-on-surface-variant' },
-                      { label: 'Active Buff', value: 'PRE-WORKOUT ADRENALINE', color: 'text-primary' },
-                    ].map((stat) => (
-                      <div key={stat.label} className="flex justify-between items-center border-b border-outline-variant/10 pb-2">
-                        <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">{stat.label}</span>
-                        <span className={`font-mono text-[10px] ${stat.color} flex items-center gap-1`}>
-                          {stat.icon && <stat.icon className="w-3 h-3" />}
-                          {stat.value}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="pt-2">
-                      <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">LONE WOLF</div>
-                      <div className="font-headline text-[10px] font-bold text-on-surface uppercase leading-relaxed">
-                        CURRENT OBJECTIVE: SURVIVE
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Rank Progress Card (Desktop) */}
-                  <div className="hidden lg:block space-y-6">
-                    <div className="bg-gradient-to-br from-surface-container-low to-surface-container-low/10 border border-primary-container/10 p-4 md:p-6 relative group overflow-hidden">
-                      <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                        <BarChart3 className="w-32 h-32 text-primary-container" />
-                      </div>
-                      <div className="relative z-10">
-                        <div className="flex justify-between items-start mb-6">
-                          <div>
-                            <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-[0.2em]">Rank Standing</div>
-                            <div className="font-headline text-4xl font-black text-primary-container glow-text-primary">{currentRank.name}</div>
-                          </div>
-                          <div className="bg-primary-container/10 px-2 py-1 border border-primary-container/20">
-                            <span className="font-mono text-[8px] text-primary-container">{currentRank.title}</span>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between font-label text-[8px] text-on-surface-variant uppercase">
-                            <span>{nextRank ? `XP to Rank ${nextRank.name}` : 'MAX RANK REACHED'}</span>
-                            <span>{exp.toLocaleString()} / {nextRank ? nextRank.min.toLocaleString() : 'MAX'}</span>
-                          </div>
-                          <div className="w-full h-1 bg-surface-container-highest">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${rankProgress}%` }}
-                              className="h-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.6)]" 
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Nutrition Protocol Card (Desktop) */}
-                    <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative group overflow-hidden">
-                      <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                        <Utensils className="w-48 h-48 text-primary-container" />
-                      </div>
-                      <div className="relative z-10">
-                        <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-[0.3em] mb-2">Nutrition Protocol</div>
-                        <div className="font-headline text-3xl font-black text-primary-container glow-text-primary">{nutritionGoal}</div>
-                        <div className="mt-6 space-y-4">
-                          <div className="flex justify-between items-center">
-                            <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Protein Target</span>
-                            <span className="font-mono text-lg text-on-surface font-bold">{proteinRequirement}G</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Current Weight</span>
-                            <span className="font-mono text-lg text-on-surface">{currentWeight} KG</span>
-                          </div>
-                          <div className="pt-2">
-                            <div className="flex justify-between font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-2">
-                              <span>Progress to {targetWeight} KG</span>
-                              <span>{Math.abs(targetWeight - currentWeight).toFixed(1)} KG Delta</span>
-                            </div>
-                            <div className="w-full h-1 bg-surface-container-highest">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${Math.min(100, (currentWeight / targetWeight) * 100)}%` }}
-                                className={`h-full ${nutritionGoal === 'BULK' ? 'bg-primary-container' : 'bg-error'}`}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pending Intel */}
-                  <div className="hidden md:block space-y-3 md:space-y-4">
-                    <h4 className="font-headline text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant px-2">Pending Intel</h4>
-                    <div className="bg-surface-container-low p-3 md:p-4 flex gap-3 md:gap-4 items-center border border-outline-variant/10">
-                      <div className="p-2 bg-surface-container-high border border-outline-variant/20">
-                        <Lock className="w-3 h-3 md:w-4 md:h-4 text-on-surface-variant" />
-                      </div>
-                      <div>
-                        <div className="font-headline text-[9px] md:text-[10px] font-bold uppercase tracking-tight">MOUNTAIN DEW PROTOCOL</div>
-                        <div className="text-[7px] md:text-[8px] text-on-surface-variant uppercase tracking-wider">
-                          {exp < 10000 
-                            ? `GET ${10000 - exp} MORE EXP TO UNLOCK` 
-                            : 'PROTOCOL UNLOCKED'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="hidden md:flex flex-col md:flex-row gap-4 mt-8">
-                    <button 
-                      onClick={logWorkout}
-                      disabled={progress === 0 || progress === 100}
-                      className={`flex-1 font-headline text-[10px] font-black tracking-[0.3em] uppercase py-5 transition-all flex items-center justify-center gap-3 ${
-                        progress === 100 
-                          ? 'bg-primary-container/10 text-primary-container/40 border border-primary-container/20 cursor-not-allowed' 
-                          : 'bg-error-container/20 text-error border border-error/20 hover:bg-error-container/30'
-                      }`}
-                    >
-                      {progress === 100 ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          Protocol Secured
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="w-4 h-4" />
-                          Breach Protocol
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
+              )}
+            </div>
           )}
 
           {activeTab === 'Schedule' && (
@@ -1939,46 +2002,152 @@ function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 gap-6">
                 <div>
-                  <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Protocol Planning</span>
-                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Training Schedule</h1>
+                  <span className="font-label text-primary-container text-sm tracking-[0.4em] ">Protocol Planning</span>
+                  <h1 className="font-sans font-semibold text-3xl md:text-5xl font-bold text-on-surface   mt-2">Training Schedule</h1>
+                </div>
+                <div className="flex flex-col items-end gap-4">
+                  <div className="flex items-center gap-2 bg-[#2c2c2e] p-1 border border-white/5 overflow-x-auto max-w-full custom-scrollbar no-scrollbar">
+                    {Array.from({ length: selectedProgramId ? (PROGRAMS.find(p => p.id === selectedProgramId)?.totalWeeks || 1) : programDuration }, (_, i) => i + 1).map(w => (
+                      <button
+                        key={w}
+                        onClick={() => setCurrentWeekTab(w)}
+                        className={`px-4 py-2 font-sans font-semibold text-sm font-bold   transition-all whitespace-nowrap ${
+                          currentWeekTab === w 
+                            ? 'bg-primary-container text-on-primary-container' 
+                            : 'text-on-surface-variant hover:text-on-surface'
+                        }`}
+                      >
+                        Week {w}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-4 relative">
+                    {selectedProgramId && (
+                      <button 
+                        onClick={() => setIsRoadmapOpen(true)}
+                        className="bg-[#2c2c2e] rounded-2xlest text-on-surface border border-white/5 px-6 py-3 font-sans font-semibold text-sm font-bold   hover:bg-primary-container/10 transition-all flex items-center gap-2"
+                      >
+                        <LayoutList className="w-4 h-4" />
+                        View Roadmap
+                      </button>
+                    )}
+                    <div className="relative">
+                      <button 
+                        onClick={() => setIsProtocolDropdownOpen(!isProtocolDropdownOpen)}
+                        className="bg-primary-container/10 text-primary-container border border-primary-container/30 px-6 py-3 font-sans font-semibold text-sm font-bold   hover:bg-primary-container/20 transition-all flex items-center gap-2"
+                      >
+                        <Rocket className="w-4 h-4" />
+                        {selectedProgramId ? PROGRAMS.find(p => p.id === selectedProgramId)?.name : 'Custom Protocol'}
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isProtocolDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      <AnimatePresence>
+                        {isProtocolDropdownOpen && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            className="absolute top-full right-0 mt-2 w-64 bg-[#2c2c2e] border border-outline-variant shadow-2xl z-50 overflow-hidden"
+                          >
+                            <button 
+                              onClick={applyCustomSchedule}
+                              className="w-full text-left px-4 py-3 font-sans font-semibold text-sm font-bold   hover:bg-primary-container/10 transition-all border-b border-outline-variant/50"
+                            >
+                              Custom Schedule
+                            </button>
+                            {PROGRAMS.map(program => (
+                              <button 
+                                key={program.id}
+                                onClick={() => {
+                                  setIsProgramModalOpen(true);
+                                  setIsProtocolDropdownOpen(false);
+                                }}
+                                className="w-full text-left px-4 py-3 font-sans font-semibold text-sm font-bold   hover:bg-primary-container/10 transition-all border-b border-outline-variant/50 flex justify-between items-center"
+                              >
+                                {program.name}
+                                <ChevronRight className="w-3 h-3" />
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
                 </div>
               </div>
 
+              {selectedProgramId && (
+                <div className="bg-primary-container/5 border border-primary-container/20 p-6 relative overflow-hidden group flame-purple">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                    <Rocket className="w-16 h-16 text-primary-container" />
+                  </div>
+                  <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                      <div className="font-label text-xs text-primary-container  tracking-[0.3em] mb-1">Active Program</div>
+                      <h3 className="font-sans font-semibold text-2xl font-bold text-on-surface  ">
+                        {PROGRAMS.find(p => p.id === selectedProgramId)?.name}
+                      </h3>
+                      <p className="text-sm text-on-surface-variant   mt-1 opacity-70">
+                        Author: {PROGRAMS.find(p => p.id === selectedProgramId)?.author}
+                        {weakpointFocus && <span className="ml-4 text-primary-container">Weakpoint: {weakpointFocus}</span>}
+                        <span className="ml-4 text-primary-container">Cycle: {getProgramCurrentCycle()} / {PROGRAMS.find(p => p.id === selectedProgramId)?.totalWeeks}</span>
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setIsRoadmapOpen(true)}
+                        className="bg-primary-container text-on-primary-container border border-primary-container/30 px-4 py-2 font-sans font-semibold text-xs font-bold   hover:brightness-110 transition-all shadow-[0_0_15px_rgba(0,229,255,0.2)]"
+                      >
+                        View Roadmap
+                      </button>
+                      {PROGRAMS.find(p => p.id === selectedProgramId)?.weakpointOptions && (
+                        <button 
+                          onClick={() => setIsWeakpointModalOpen(true)}
+                          className="bg-[#2c2c2e] rounded-2xlest text-on-surface border border-white/5 px-4 py-2 font-sans font-semibold text-xs font-bold   hover:bg-primary-container/10 transition-all"
+                        >
+                          Adjust Weakpoint
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Deload Configuration */}
-              <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-                <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container mb-6 flex items-center gap-3">
+              <div className="bg-[#1c1c1e] rounded-2xl p-6 border border-white/5">
+                <h3 className="font-sans font-semibold text-lg font-bold   text-primary-container mb-6 flex items-center gap-3">
                   <RefreshCw className="w-5 h-5" />
                   Deload Cycle Configuration
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
-                    <label className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Program Duration (Weeks)</label>
+                    <label className="font-label text-sm text-on-surface-variant  ">Program Duration (Weeks)</label>
                     <select 
                       value={programDuration}
                       onChange={(e) => setProgramDuration(parseInt(e.target.value))}
-                      className="w-full bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                      className="w-full bg-[#2c2c2e]est border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                     >
                       {[4, 5, 6, 7, 8].map(w => <option key={w} value={w}>{w} Weeks</option>)}
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">Program Start Date</label>
+                    <label className="font-label text-sm text-on-surface-variant  ">Program Start Date</label>
                     <input 
                       type="date"
                       value={programStartDate}
                       onChange={(e) => setProgramStartDate(e.target.value)}
-                      className="w-full bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                      className="w-full bg-[#2c2c2e]est border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                     />
                   </div>
                   <div className="flex items-end">
                     <button 
                       onClick={() => setIsDeloadEnabled(!isDeloadEnabled)}
-                      className={`w-full py-3 font-headline text-[10px] font-black tracking-widest uppercase transition-all ${
+                      className={`w-full py-3 font-sans font-semibold text-sm font-bold   transition-all ${
                         isDeloadEnabled 
                           ? 'bg-primary-container text-on-primary-container' 
-                          : 'bg-surface-container-highest text-on-surface-variant'
+                          : 'bg-[#2c2c2e]est text-on-surface-variant'
                       }`}
                     >
                       {isDeloadEnabled ? 'Deload Protocol: Active' : 'Deload Protocol: Disabled'}
@@ -1988,8 +2157,8 @@ function App() {
                 {isDeloadEnabled && (
                   <div className="mt-4 p-3 bg-primary-container/5 border border-primary-container/20">
                     <div className="flex justify-between items-center">
-                      <div className="font-label text-[8px] text-primary-container uppercase tracking-widest">Current Status</div>
-                      <div className="font-mono text-[10px] text-on-surface">
+                      <div className="font-label text-xs text-primary-container  ">Current Status</div>
+                      <div className="font-mono text-sm text-on-surface">
                         Week {getDeloadStatus().currentWeek} of Program | {getDeloadStatus().isDeloadWeek ? 'DELOAD ACTIVE' : `Week ${getDeloadStatus().weekInCycle} of ${programDuration}`}
                       </div>
                     </div>
@@ -1999,122 +2168,214 @@ function App() {
 
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                 {/* Days Selector */}
-                <div className="lg:col-span-1 space-y-2">
-                  {DAYS.map(day => (
+                <div className="lg:col-span-1 space-y-4">
+                  {!selectedProgramId && (
+                    <div className="bg-[#1c1c1e] rounded-2xl p-4 border border-white/5 space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-label text-xs text-on-surface-variant  ">Schedule Mode</span>
+                          <div className={`w-2 h-2 rounded-full ${isRepeatSchedule ? 'bg-primary-container' : 'bg-on-surface-variant/30'}`} />
+                        </div>
+                        <button 
+                          onClick={() => setIsRepeatSchedule(!isRepeatSchedule)}
+                          className={`w-full py-2 font-sans font-semibold text-xs font-bold   border transition-all ${
+                            isRepeatSchedule 
+                              ? 'bg-primary-container/10 border-primary-container/30 text-primary-container' 
+                              : 'bg-[#2c2c2e]est border-white/5 text-on-surface-variant'
+                          }`}
+                        >
+                          {isRepeatSchedule ? 'Repeat Weekly: ON' : 'Repeat Weekly: OFF'}
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="font-label text-xs text-on-surface-variant  ">Schedule Start Date</label>
+                        <input 
+                          type="date"
+                          value={customScheduleStartDate}
+                          onChange={(e) => {
+                            setCustomScheduleStartDate(e.target.value);
+                            localStorage.setItem('sovereign_custom_schedule_start_date', e.target.value);
+                          }}
+                          className="w-full bg-[#2c2c2e]est border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-2  "
+                        />
+                      </div>
+
+                      <p className="text-[7px] text-on-surface-variant   mt-2 opacity-60 leading-tight">
+                        {isRepeatSchedule 
+                          ? 'Protocol will loop this 7-day cycle indefinitely.' 
+                          : 'Protocol will execute this cycle once starting from the date above and then standby.'}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2">
+                    {DAYS.map(day => (
                     <button
                       key={day}
                       onClick={() => setSelectedDay(day)}
-                      className={`w-full p-4 font-headline text-[10px] font-bold uppercase tracking-[0.2em] text-left transition-all ${
+                      className={`w-full p-4 font-sans font-semibold text-sm font-bold   text-left transition-all ${
                         selectedDay === day 
                           ? 'bg-primary-container text-on-primary-container shadow-[0_0_15px_rgba(0,229,255,0.2)]' 
-                          : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
+                          : 'bg-[#1c1c1e] text-on-surface-variant hover:bg-[#2c2c2e]'
                       }`}
                     >
                       {day}
-                      <div className="text-[8px] opacity-60 mt-1">
-                        {schedule.find(d => d.day === day)?.exercises.length || 0} Exercises
+                      <div className="text-xs opacity-60 mt-1">
+                        {schedule[currentWeekTab]?.find(d => d.day === day)?.exercises.length || 0} Exercises
                       </div>
                     </button>
                   ))}
+                  </div>
                 </div>
 
                 {/* Exercises for Selected Day */}
                 <div className="lg:col-span-3 space-y-6">
-                  <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-                    <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container mb-6 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <CalendarIcon className="w-5 h-5" />
-                        {selectedDay} Routine
+                  <div className="bg-[#1c1c1e] rounded-2xl p-6 border border-white/5">
+                    <h3 className="font-sans font-semibold text-lg font-bold   text-primary-container mb-6 flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-3">
+                          <CalendarIcon className="w-5 h-5" />
+                          {selectedDay} Routine
+                          {selectedProgramId && (
+                            <span className="text-sm text-on-surface-variant font-normal tracking-normal ml-2">
+                              (Week {currentWeekTab})
+                            </span>
+                          )}
+                        </div>
+                        {selectedProgramId && PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[selectedDay] && (
+                          <div className="mt-1 font-label text-sm text-primary-container/80 font-bold">
+                            {PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[selectedDay]}
+                          </div>
+                        )}
                       </div>
-                      {schedule.find(d => d.day === selectedDay)?.phase && (
-                        <div className={`text-[10px] px-3 py-1 border ${
-                          schedule.find(d => d.day === selectedDay)?.phase === 'BULK' 
+                      {schedule[currentWeekTab]?.find(d => d.day === selectedDay)?.phase && (
+                        <div className={`text-sm px-3 py-1 border ${
+                          schedule[currentWeekTab]?.find(d => d.day === selectedDay)?.phase === 'BULK' 
                             ? 'bg-primary-container/10 border-primary-container/30 text-primary-container' 
-                            : schedule.find(d => d.day === selectedDay)?.phase === 'CUT'
+                            : schedule[currentWeekTab]?.find(d => d.day === selectedDay)?.phase === 'CUT'
                             ? 'bg-error/10 border-error/30 text-error'
-                            : 'bg-surface-container-high border-outline-variant/20 text-on-surface-variant'
+                            : 'bg-[#2c2c2e] border-white/5 text-on-surface-variant'
                         }`}>
-                          PHASE: {schedule.find(d => d.day === selectedDay)?.phase}
+                          PHASE: {schedule[currentWeekTab]?.find(d => d.day === selectedDay)?.phase}
                         </div>
                       )}
                     </h3>
 
                     <div className="space-y-4 mb-8">
-                      {schedule.find(d => d.day === selectedDay)?.exercises.length === 0 ? (
-                        <div className="text-on-surface-variant/30 font-headline text-[10px] uppercase tracking-widest text-center py-12 border border-dashed border-outline-variant/20">
+                      {schedule[currentWeekTab]?.find(d => d.day === selectedDay)?.exercises.length === 0 ? (
+                        <div className="text-on-surface-variant/30 font-sans font-semibold text-sm   text-center py-12 border border-dashed border-white/5">
                           No exercises assigned to this cycle
                         </div>
                       ) : (
-                        schedule.find(d => d.day === selectedDay)?.exercises.map(ex => (
-                          <div key={ex.id} className="bg-surface-container-high p-4 flex justify-between items-center group">
-                            <div className="flex-grow">
-                              <div className="font-headline font-bold uppercase tracking-tight text-sm">{ex.name}</div>
-                              <div className="font-label text-[8px] text-on-surface-variant uppercase mb-2">{ex.target} | {ex.sets} sets</div>
-                              {ex.setData && (
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                  {ex.setData.map((s, idx) => (
-                                    <div key={idx} className="bg-surface-container-highest/30 p-1 px-2 text-[7px] text-on-surface-variant uppercase flex justify-between">
-                                      <span>S{idx + 1}</span>
-                                      <span className="text-primary-container">{s.weight} x {s.reps}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {!ex.setData && (
-                                <div className="font-label text-[8px] text-on-surface-variant uppercase opacity-60">{ex.weight} | {ex.reps} reps</div>
-                              )}
-                            </div>
-                            <button 
-                              onClick={() => removeExerciseFromSchedule(selectedDay, ex.id)}
-                              className="text-error/50 hover:text-error transition-colors"
+                        schedule[currentWeekTab]?.find(d => d.day === selectedDay)?.exercises.map(ex => (
+                          <div key={ex.id} className="bg-[#2c2c2e] rounded-2xl flex flex-col group overflow-hidden">
+                            <div 
+                              className="p-4 flex justify-between items-center cursor-pointer"
+                              onClick={() => toggleExpandedScheduleExercise(ex.id)}
                             >
-                              <Terminal className="w-4 h-4" />
-                            </button>
+                              <div className="flex-grow">
+                                <div className="flex items-center gap-3">
+                                  <div className="font-sans font-semibold font-bold text-sm">{ex.name}</div>
+                                </div>
+                                <div className="font-label text-xs text-on-surface-variant">{ex.target} | {ex.sets} sets</div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); removeExerciseFromSchedule(selectedDay, ex.id); }}
+                                  className="text-error/50 hover:text-error transition-colors p-2"
+                                >
+                                  <Terminal className="w-4 h-4" />
+                                </button>
+                                <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${expandedScheduleExercises.includes(ex.id) ? 'rotate-180' : ''}`} />
+                              </div>
+                            </div>
+
+                            <AnimatePresence>
+                              {expandedScheduleExercises.includes(ex.id) && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                >
+                                  <div className="p-4 pt-0 border-t border-white/5 mt-2">
+                                    {(ex.videoUrl || getExerciseVideoUrl(ex.name)) && (
+                                      <button 
+                                        onClick={() => setActiveVideoUrl((ex.videoUrl || getExerciseVideoUrl(ex.name))!)}
+                                        className="text-primary-container text-xs flex items-center gap-1 mb-3 hover:underline"
+                                      >
+                                        <Youtube className="w-3 h-3" /> Watch Tutorial
+                                      </button>
+                                    )}
+                                    
+                                    {ex.notes && (
+                                      <div className="mb-3 p-2 bg-primary-container/5 border-l-2 border-primary-container/30 text-xs text-on-surface-variant leading-relaxed">
+                                        <span className="text-primary-container font-bold mr-1">Notes:</span> {ex.notes}
+                                      </div>
+                                    )}
+
+                                    {ex.setData && (
+                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        {ex.setData.map((s, idx) => (
+                                          <div key={idx} className="bg-[#1c1c1e] rounded-2xlest/30 p-1 px-2 text-[10px] text-on-surface-variant flex justify-between">
+                                            <span>S{idx + 1}</span>
+                                            <span className="text-primary-container">{s.weight} x {s.reps}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {!ex.setData && (
+                                      <div className="font-label text-xs text-on-surface-variant opacity-60">{ex.weight} | {ex.reps} reps</div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         ))
                       )}
                     </div>
 
                     {/* Add Exercise Form */}
-                    <div className="border-t border-outline-variant/10 pt-6">
-                      <h4 className="font-headline text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-4">Add New Exercise</h4>
+                    <div className="border-t border-white/5 pt-6">
+                      <h4 className="font-sans font-semibold text-sm font-bold   text-on-surface-variant mb-4">Add New Exercise</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input 
                           placeholder="EXERCISE NAME"
                           value={newExercise.name}
                           onChange={e => setNewExercise({...newExercise, name: e.target.value.toUpperCase()})}
-                          className="bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                          className="bg-[#2c2c2e] rounded-2xlest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                         />
                         <input 
                           placeholder="TARGET MUSCLE"
                           value={newExercise.target}
                           onChange={e => setNewExercise({...newExercise, target: e.target.value.toUpperCase()})}
-                          className="bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                          className="bg-[#2c2c2e] rounded-2xlest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                         />
                         <div className="grid grid-cols-3 gap-2">
                           <input 
                             placeholder="WEIGHT"
                             value={newExercise.weight}
                             onChange={e => setNewExercise({...newExercise, weight: e.target.value})}
-                            className="bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                            className="bg-[#2c2c2e] rounded-2xlest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                           />
                           <input 
                             placeholder="REPS"
                             type="number"
                             value={newExercise.reps || ''}
                             onChange={e => setNewExercise({...newExercise, reps: parseInt(e.target.value) || 0})}
-                            className="bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                            className="bg-[#2c2c2e] rounded-2xlest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                           />
                           <input 
                             placeholder="SETS"
                             value={newExercise.sets}
                             onChange={e => setNewExercise({...newExercise, sets: e.target.value})}
-                            className="bg-surface-container-highest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-headline text-[10px] p-3 uppercase tracking-widest"
+                            className="bg-[#2c2c2e] rounded-2xlest border-0 border-b border-outline-variant focus:ring-0 focus:border-primary-container text-on-surface font-sans font-semibold text-sm p-3  "
                           />
                         </div>
                         <button 
                           onClick={addExerciseToSchedule}
-                          className="bg-primary-container text-on-primary-container font-headline text-[10px] font-black tracking-widest uppercase py-3 hover:brightness-110 transition-all"
+                          className="bg-primary-container text-on-primary-container font-sans font-semibold text-sm font-bold   py-3 hover:brightness-110 transition-all"
                         >
                           ASSIGN TO CYCLE
                         </button>
@@ -2131,16 +2392,16 @@ function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 gap-6">
                 <div>
-                  <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Historical Data</span>
-                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Protocol Archive</h1>
+                  <span className="font-label text-primary-container text-sm tracking-[0.4em] ">Historical Data</span>
+                  <h1 className="font-sans font-semibold text-3xl md:text-5xl font-bold text-on-surface   mt-2">Protocol Archive</h1>
                 </div>
                 <div className="flex gap-4 w-full md:w-auto">
                   {archive.length > 0 && (
                     <button 
                       onClick={() => setShowPurgeModal(true)}
-                      className="w-full md:w-auto font-headline text-[10px] font-black uppercase tracking-[0.2em] text-error hover:text-error/80 transition-colors border border-error/20 px-4 py-2 bg-error/5 hover:bg-error/10"
+                      className="w-full md:w-auto font-sans font-semibold text-sm font-bold   text-error hover:text-error/80 transition-colors border border-error/20 px-4 py-2 bg-error/5 hover:bg-error/10"
                     >
                       Purge Archive Data
                     </button>
@@ -2150,26 +2411,26 @@ function App() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Calendar Grid */}
-                <div className="lg:col-span-2 bg-surface-container-low p-4 md:p-6 border border-outline-variant/10">
+                <div className="lg:col-span-2 bg-[#1c1c1e] p-4 md:p-6 border border-white/5">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 md:mb-8 gap-3 md:gap-4">
-                    <h3 className="font-headline text-sm md:text-lg font-bold uppercase tracking-widest text-primary-container flex items-center gap-2 md:gap-3">
+                    <h3 className="font-sans font-semibold text-sm md:text-lg font-bold   text-primary-container flex items-center gap-2 md:gap-3">
                       <History className="w-4 h-4 md:w-5 md:h-5" />
                       Daily Quest History
                     </h3>
                     <div className="flex flex-wrap gap-2 md:gap-4 items-center w-full md:w-auto justify-between">
-                      <div className="font-label text-[8px] md:text-[10px] text-on-surface-variant uppercase tracking-widest">
+                      <div className="font-label text-xs md:text-sm text-on-surface-variant  ">
                         {format(currentMonth, 'MMMM yyyy')}
                       </div>
                       <div className="flex gap-1 md:gap-2">
                         <button 
                           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                          className="p-1.5 md:p-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-outline-variant/10"
+                          className="p-1.5 md:p-2 bg-[#2c2c2e] hover:bg-[#2c2c2e]est text-on-surface-variant border border-white/5"
                         >
                           <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
                         <button 
                           onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                          className="p-1.5 md:p-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-outline-variant/10"
+                          className="p-1.5 md:p-2 bg-[#2c2c2e] hover:bg-[#2c2c2e]est text-on-surface-variant border border-white/5"
                         >
                           <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
@@ -2177,9 +2438,9 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-7 gap-px bg-outline-variant/10 border border-outline-variant/10">
+                  <div className="grid grid-cols-7 gap-px bg-outline-variant/10 border border-white/5">
                     {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, idx) => (
-                      <div key={idx} className="bg-surface-container-low p-1 md:p-2 text-center font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10">
+                      <div key={idx} className="bg-[#1c1c1e] rounded-2xl p-1 md:p-2 text-center font-label text-xs text-on-surface-variant   border-b border-white/5">
                         {d}
                       </div>
                     ))}
@@ -2202,10 +2463,10 @@ function App() {
                             key={i}
                             onClick={() => setSelectedArchiveDate(day)}
                             className={`relative h-14 md:h-24 p-1 md:p-2 transition-all hover:z-10 ${
-                              isCurrentMonth ? 'bg-surface-container-low' : 'bg-surface-container-low/30 opacity-30'
+                              isCurrentMonth ? 'bg-[#1c1c1e]' : 'bg-[#1c1c1e]/30 opacity-30'
                             } ${isSelected ? 'ring-2 ring-primary-container ring-inset z-10' : ''} ${
                               isDeloadWeek ? 'bg-emerald-500/5' : ''
-                            } border-r border-b border-outline-variant/10 overflow-hidden`}
+                            } border-r border-b border-white/5 overflow-hidden`}
                           >
                             {/* Program/Deload Line */}
                             {isActiveProgram && isCurrentMonth && (
@@ -2213,11 +2474,11 @@ function App() {
                             )}
 
                             <div className="flex justify-between items-start">
-                              <span className={`font-mono text-[8px] md:text-[10px] ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
+                              <span className={`font-mono text-xs md:text-sm ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
                                 {format(day, 'd')}
                               </span>
                               {isDeloadEnabled && isCurrentMonth && (
-                                <span className={`text-[6px] uppercase tracking-tighter ${isDeloadWeek ? 'text-emerald-500 font-bold' : 'text-on-surface-variant/40'}`}>
+                                <span className={`text-[6px]   ${isDeloadWeek ? 'text-emerald-500 font-bold' : 'text-on-surface-variant/40'}`}>
                                   {isDeloadWeek ? 'DELOAD' : `W${weekInCycle}`}
                                 </span>
                               )}
@@ -2247,26 +2508,26 @@ function App() {
 
                 {/* Day Details */}
                 <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-surface-container-low p-4 md:p-6 border border-outline-variant/10 h-full">
-                    <h4 className="font-headline text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant mb-6">
+                  <div className="bg-[#1c1c1e] rounded-2xl p-4 md:p-6 border border-white/5 h-full">
+                    <h4 className="font-sans font-semibold text-sm font-bold  tracking-[0.3em] text-on-surface-variant mb-6">
                       {selectedArchiveDate ? format(selectedArchiveDate, 'EEEE, MMMM do') : 'Select a date to view intel'}
                     </h4>
 
                     {!selectedArchiveDate ? (
                       <div className="flex flex-col items-center justify-center h-64 text-on-surface-variant/20">
                         <Terminal className="w-12 h-12 mb-4" />
-                        <div className="font-headline text-[8px] uppercase tracking-widest">Awaiting Selection</div>
+                        <div className="font-sans font-semibold text-xs  ">Awaiting Selection</div>
                       </div>
                     ) : (
                       <div className="space-y-6">
                         {archive.filter(e => e.date === format(selectedArchiveDate, 'yyyy-MM-dd')).length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-12 border border-dashed border-outline-variant/20 space-y-4">
-                            <div className="text-on-surface-variant/30 font-headline text-[10px] uppercase tracking-widest text-center">
+                          <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/5 space-y-4">
+                            <div className="text-on-surface-variant/30 font-sans font-semibold text-sm   text-center">
                               No protocol data for this cycle
                             </div>
                             <button 
                               onClick={() => createManualArchiveEntry(selectedArchiveDate)}
-                              className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-[8px] font-black text-primary-container uppercase tracking-widest hover:bg-primary-container/20 transition-all"
+                              className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-xs font-bold text-primary-container   hover:bg-primary-container/20 transition-all"
                             >
                               <Rocket className="w-3 h-3" />
                               Initialize Manual Entry
@@ -2287,16 +2548,16 @@ function App() {
                                      entry.type === 'INCOMPLETE' ? <AlertTriangle className="w-4 h-4 text-amber-500" /> :
                                      entry.type === 'BREACH' ? <XCircle className="w-4 h-4 text-error animate-pulse" /> :
                                      <XCircle className="w-4 h-4 text-error" />}
-                                    <span className={`font-headline text-sm font-bold uppercase tracking-tight ${entry.type === 'BREACH' ? 'text-error' : ''}`}>{entry.details}</span>
+                                    <span className={`font-sans font-semibold text-sm font-bold   ${entry.type === 'BREACH' ? 'text-error' : ''}`}>{entry.details}</span>
                                   </div>
                                   <button 
                                     onClick={() => handleEditArchive(entry)}
-                                    className="p-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-outline-variant/10 transition-all"
+                                    className="p-1.5 bg-[#2c2c2e] hover:bg-[#2c2c2e]est text-on-surface-variant border border-white/5 transition-all"
                                   >
                                     <Settings className="w-3 h-3" />
                                   </button>
                                 </div>
-                                <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest flex items-center gap-3">
+                                <div className="font-label text-xs text-on-surface-variant   flex items-center gap-3">
                                   <span>Status: {entry.type} {entry.progress !== undefined && `(${entry.progress}%)`}</span>
                                   {entry.duration !== undefined && (
                                     <span className="flex items-center gap-1">
@@ -2309,57 +2570,57 @@ function App() {
 
                               {entry.exercises && (
                                 <div className="space-y-2">
-                                  <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10 pb-1">Exercise Intel</div>
+                                  <div className="font-label text-xs text-on-surface-variant   border-b border-white/5 pb-1">Exercise Intel</div>
                                   {entry.exercises.map(ex => (
-                                    <div key={ex.id} className="bg-surface-container-high p-3 space-y-2 border border-outline-variant/10">
+                                    <div key={ex.id} className="bg-[#2c2c2e] rounded-2xl p-3 space-y-2 border border-white/5">
                                       <div className="flex justify-between items-center">
                                         <div>
-                                          <div className="font-headline font-bold uppercase tracking-tight text-[10px]">{ex.name}</div>
-                                          <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.target}</div>
+                                          <div className="font-sans font-semibold font-bold   text-sm">{ex.name}</div>
+                                          <div className="font-label text-xs text-on-surface-variant ">{ex.target}</div>
                                         </div>
                                         <div className="text-right">
-                                          <div className="font-label text-[8px] text-on-surface-variant uppercase">{ex.sets} Sets</div>
+                                          <div className="font-label text-xs text-on-surface-variant ">{ex.sets} Sets</div>
                                         </div>
                                       </div>
                                       {ex.setData ? (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-outline-variant/5">
                                           {ex.setData.map((s, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-2 bg-surface-container-highest/20 border border-outline-variant/10 rounded">
+                                            <div key={idx} className="flex items-center justify-between p-2 bg-[#2c2c2e]est/20 border border-white/5 rounded">
                                               <div className="flex items-center gap-2">
                                                 <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
-                                                  <span className="font-headline text-[8px] font-bold text-primary-container">{idx + 1}</span>
+                                                  <span className="font-sans font-semibold text-xs font-bold text-primary-container">{idx + 1}</span>
                                                 </div>
-                                                <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Set</span>
+                                                <span className="font-label text-xs text-on-surface-variant  ">Set</span>
                                               </div>
                                               <div className="flex gap-3">
                                                 <div className="text-right">
-                                                  <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Weight</div>
-                                                  <div className="font-mono text-[10px] text-on-surface leading-none">{s.weight}</div>
+                                                  <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Weight</div>
+                                                  <div className="font-mono text-sm text-on-surface leading-none">{s.weight}</div>
                                                 </div>
                                                 <div className="text-right">
-                                                  <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Reps</div>
-                                                  <div className="font-mono text-[10px] text-on-surface leading-none">{s.reps}</div>
+                                                  <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Reps</div>
+                                                  <div className="font-mono text-sm text-on-surface leading-none">{s.reps}</div>
                                                 </div>
                                               </div>
                                             </div>
                                           ))}
                                         </div>
                                       ) : (
-                                        <div className="flex justify-between items-center p-2 bg-surface-container-highest/20 border border-outline-variant/10 rounded pt-2 mt-2">
+                                        <div className="flex justify-between items-center p-2 bg-[#2c2c2e]est/20 border border-white/5 rounded pt-2 mt-2">
                                           <div className="flex items-center gap-2">
                                             <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
-                                              <span className="font-headline text-[8px] font-bold text-primary-container">1</span>
+                                              <span className="font-sans font-semibold text-xs font-bold text-primary-container">1</span>
                                             </div>
-                                            <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">Standard Protocol</span>
+                                            <span className="font-label text-xs text-on-surface-variant  ">Standard Protocol</span>
                                           </div>
                                           <div className="flex gap-3">
                                             <div className="text-right">
-                                              <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Weight</div>
-                                              <div className="font-mono text-[10px] text-on-surface leading-none">{ex.weight}</div>
+                                              <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Weight</div>
+                                              <div className="font-mono text-sm text-on-surface leading-none">{ex.weight}</div>
                                             </div>
                                             <div className="text-right">
-                                              <div className="text-[6px] text-on-surface-variant/50 uppercase leading-none mb-0.5">Reps</div>
-                                              <div className="font-mono text-[10px] text-on-surface leading-none">{ex.reps}</div>
+                                              <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Reps</div>
+                                              <div className="font-mono text-sm text-on-surface leading-none">{ex.reps}</div>
                                             </div>
                                           </div>
                                         </div>
@@ -2372,7 +2633,7 @@ function App() {
                           ))}
                             <button 
                               onClick={() => createManualArchiveEntry(selectedArchiveDate)}
-                              className="w-full py-3 border border-dashed border-outline-variant/20 text-[8px] uppercase tracking-widest text-on-surface-variant hover:bg-surface-container-highest/20 transition-all flex items-center justify-center gap-2"
+                              className="w-full py-3 border border-dashed border-white/5 text-xs   text-on-surface-variant hover:bg-[#2c2c2e]est/20 transition-all flex items-center justify-center gap-2"
                             >
                               <Plus className="w-3 h-3" />
                               Add Another Session
@@ -2392,16 +2653,23 @@ function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 gap-6">
                 <div>
-                  <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Metabolic Optimization</span>
-                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Nutrition Protocol</h1>
+                  <span className="font-label text-primary-container text-sm tracking-[0.4em] ">Metabolic Optimization</span>
+                  <h1 className="font-sans font-semibold text-3xl md:text-5xl font-bold text-on-surface   mt-2">Nutrition Protocol</h1>
                 </div>
-                <div className="flex items-center gap-4 bg-surface-container-low p-4 border border-outline-variant/10">
+                <div className="flex items-center gap-6 bg-[#1c1c1e] p-4 border border-white/5">
                   <div className="text-right">
-                    <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest mb-1">Current Weight</div>
-                    <div className="font-headline text-2xl font-black text-primary-container uppercase tracking-tighter leading-none">
+                    <div className="font-label text-xs text-on-surface-variant   mb-1">Current Weight</div>
+                    <div className="font-sans font-semibold text-2xl font-bold text-primary-container   leading-none">
                       {currentWeight} <span className="text-xs">KG</span>
+                    </div>
+                  </div>
+                  <div className="w-px h-8 bg-outline-variant/20"></div>
+                  <div className="text-right">
+                    <div className="font-label text-xs text-on-surface-variant   mb-1">Body Fat</div>
+                    <div className="font-sans font-semibold text-2xl font-bold text-primary-container   leading-none">
+                      {bodyFat} <span className="text-xs">%</span>
                     </div>
                   </div>
                   <Scale className="w-8 h-8 text-primary-container/20" />
@@ -2412,57 +2680,87 @@ function App() {
                 {/* Left Column: Active Protocol & Logging */}
                 <div className="space-y-8">
                   {/* Quick Weight Log */}
-                  <div className="bg-surface-container-low p-6 border border-outline-variant/10 relative overflow-hidden group">
+                  <div className="bg-[#1c1c1e] rounded-2xl p-6 border border-white/5 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                       <Scale className="w-16 h-16" />
                     </div>
-                    <h3 className="font-headline text-xs font-black uppercase tracking-widest mb-6 flex items-center gap-2 text-primary-container">
+                    <h3 className="font-sans font-semibold text-xs font-bold   mb-6 flex items-center gap-2 text-primary-container">
                       <Plus className="w-3 h-3" />
                       Log New Weight
                     </h3>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input 
-                        type="number"
-                        step="0.1"
-                        placeholder="00.0"
-                        value={weightInput}
-                        onChange={(e) => setWeightInput(e.target.value)}
-                        className="flex-grow bg-surface-container-high border border-outline-variant/30 p-4 font-mono text-xl text-on-surface focus:border-primary-container outline-none transition-all placeholder:opacity-20"
-                      />
-                      <button 
-                        onClick={() => {
-                          const w = parseFloat(weightInput);
-                          if (w > 0) {
-                            logWeight(w);
-                            setWeightInput('');
-                          }
-                        }}
-                        className="bg-primary-container text-on-primary-container py-4 sm:px-8 font-headline text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all active:scale-95"
-                      >
-                        Log
-                      </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="font-label text-xs text-on-surface-variant  ">Log Weight (KG)</div>
+                        <div className="flex gap-2">
+                          <input 
+                            type="number"
+                            step="0.1"
+                            placeholder="00.0"
+                            value={weightInput}
+                            onChange={(e) => setWeightInput(e.target.value)}
+                            className="flex-grow bg-[#2c2c2e] border border-white/10 p-4 font-mono text-xl text-on-surface focus:border-primary-container outline-none transition-all placeholder:opacity-20"
+                          />
+                          <button 
+                            onClick={() => {
+                              const w = parseFloat(weightInput);
+                              if (w > 0) {
+                                logWeight(w);
+                                setWeightInput('');
+                              }
+                            }}
+                            className="bg-primary-container text-on-primary-container px-6 font-sans font-semibold text-sm font-bold   hover:brightness-110 transition-all active:scale-95"
+                          >
+                            Log
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="font-label text-xs text-on-surface-variant  ">Log Body Fat (%)</div>
+                        <div className="flex gap-2">
+                          <input 
+                            type="number"
+                            step="0.1"
+                            placeholder="00.0"
+                            value={bodyFatInput}
+                            onChange={(e) => setBodyFatInput(e.target.value)}
+                            className="flex-grow bg-[#2c2c2e] border border-white/10 p-4 font-mono text-xl text-on-surface focus:border-primary-container outline-none transition-all placeholder:opacity-20"
+                          />
+                          <button 
+                            onClick={() => {
+                              const bf = parseFloat(bodyFatInput);
+                              if (bf > 0) {
+                                setBodyFat(bf);
+                                setBodyFatInput('');
+                              }
+                            }}
+                            className="bg-primary-container text-on-primary-container px-6 font-sans font-semibold text-sm font-bold   hover:brightness-110 transition-all active:scale-95"
+                          >
+                            Set
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[7px] text-on-surface-variant uppercase tracking-widest mt-4 opacity-50">
+                    <p className="text-[7px] text-on-surface-variant   mt-4 opacity-50">
                       Operator biometrics are synced across all protocol modules.
                     </p>
                   </div>
 
                   {/* Caloric Engine */}
-                  <div className="bg-surface-container-low p-8 border border-outline-variant/10 relative overflow-hidden">
+                  <div className="bg-[#1c1c1e] rounded-2xl p-8 border border-white/5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-6 opacity-5">
                       <Zap className="w-24 h-24" />
                     </div>
                     <div className="flex justify-between items-start mb-8">
                       <div>
-                        <span className="font-label text-primary-container text-[8px] tracking-[0.3em] uppercase">Caloric Engine</span>
-                        <h3 className="font-headline text-xl font-black text-on-surface uppercase tracking-tighter mt-1">Daily Target</h3>
+                        <span className="font-label text-primary-container text-xs tracking-[0.3em] ">Caloric Engine</span>
+                        <h3 className="font-sans font-semibold text-xl font-bold text-on-surface   mt-1">Daily Target</h3>
                       </div>
                       <button 
                         onClick={() => setIsAutoCalories(!isAutoCalories)}
-                        className={`flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all border ${
+                        className={`flex items-center gap-2 px-3 py-1 text-xs font-bold   transition-all border ${
                           isAutoCalories 
                             ? 'bg-primary-container/10 text-primary-container border-primary-container/30' 
-                            : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30'
+                            : 'bg-[#2c2c2e] text-on-surface-variant border-white/10'
                         }`}
                       >
                         {isAutoCalories ? <Zap className="w-3 h-3" /> : <Settings className="w-3 h-3" />}
@@ -2473,7 +2771,7 @@ function App() {
                     <div className="flex flex-col sm:flex-row sm:items-baseline gap-x-12 gap-y-8 mb-8">
                       <div className="flex items-baseline gap-2">
                         {isAutoCalories ? (
-                          <div className="font-headline text-5xl sm:text-6xl font-black text-primary-container tracking-tighter">
+                          <div className="font-sans font-semibold text-5xl sm:text-6xl font-bold text-primary-container ">
                             {calories}
                           </div>
                         ) : (
@@ -2481,35 +2779,35 @@ function App() {
                             type="number"
                             value={calories}
                             onChange={(e) => setCalories(parseInt(e.target.value) || 0)}
-                            className="bg-transparent border-b-2 border-primary-container/30 font-headline text-5xl sm:text-6xl text-primary-container focus:border-primary-container outline-none w-32 sm:w-48 tracking-tighter"
+                            className="bg-transparent border-b-2 border-primary-container/30 font-sans font-semibold text-5xl sm:text-6xl text-primary-container focus:border-primary-container outline-none w-32 sm:w-48 "
                           />
                         )}
-                        <span className="font-headline text-lg sm:text-xl text-on-surface-variant uppercase font-bold">KCAL</span>
+                        <span className="font-sans font-semibold text-lg sm:text-xl text-on-surface-variant  font-bold">KCAL</span>
                       </div>
 
-                      <div className="flex items-baseline gap-2 sm:border-l sm:border-outline-variant/20 sm:pl-8">
-                        <div className="font-headline text-4xl sm:text-5xl font-black text-on-surface tracking-tighter">
+                      <div className="flex items-baseline gap-2 sm:border-l sm:border-white/5 sm:pl-8">
+                        <div className="font-sans font-semibold text-4xl sm:text-5xl font-bold text-on-surface ">
                           {proteinRequirement}
                         </div>
-                        <span className="font-headline text-sm sm:text-lg text-on-surface-variant uppercase font-bold">PRO (G)</span>
+                        <span className="font-sans font-semibold text-sm sm:text-lg text-on-surface-variant  font-bold">PRO (G)</span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 border-t border-outline-variant/10 pt-8">
+                    <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-8">
                       <div className="text-center">
-                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-1">Fats</div>
-                        <div className="font-headline text-sm font-black text-on-surface">{Math.round((calories * 0.25) / 9)}G</div>
+                        <div className="font-label text-[7px] text-on-surface-variant   mb-1">Fats</div>
+                        <div className="font-sans font-semibold text-sm font-bold text-on-surface">{Math.round((calories * 0.25) / 9)}G</div>
                       </div>
-                      <div className="text-center border-l border-outline-variant/10">
-                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-1">Carbs</div>
-                        <div className="font-headline text-sm font-black text-on-surface">{Math.round((calories - (proteinRequirement * 4) - (calories * 0.25)) / 4)}G</div>
+                      <div className="text-center border-l border-white/5">
+                        <div className="font-label text-[7px] text-on-surface-variant   mb-1">Carbs</div>
+                        <div className="font-sans font-semibold text-sm font-bold text-on-surface">{Math.round((calories - (proteinRequirement * 4) - (calories * 0.25)) / 4)}G</div>
                       </div>
                     </div>
                   </div>
 
                   {/* Phase Timeline */}
-                  <div className="bg-surface-container-low p-8 border border-outline-variant/10">
-                    <h3 className="font-headline text-xs font-black uppercase tracking-widest mb-8 flex items-center gap-2 text-on-surface-variant">
+                  <div className="bg-[#1c1c1e] rounded-2xl p-8 border border-white/5">
+                    <h3 className="font-sans font-semibold text-xs font-bold   mb-8 flex items-center gap-2 text-on-surface-variant">
                       <Clock className="w-4 h-4" />
                       Phase Timeline
                     </h3>
@@ -2521,34 +2819,34 @@ function App() {
                           <div className="space-y-4">
                             <div className="flex justify-between items-end">
                               <div>
-                                <div className="font-headline text-2xl font-black text-on-surface uppercase tracking-tight">
+                                <div className="font-sans font-semibold text-2xl font-bold text-on-surface  ">
                                   {status.isCompleted ? 'PHASE COMPLETE' : `WEEK ${Math.floor(status.elapsedDays / 7) + 1} OF ${nutritionDurationWeeks}`}
                                 </div>
                               </div>
                               <div className="font-mono text-xs text-primary-container font-bold">{Math.round(status.progress)}%</div>
                             </div>
-                            <div className="h-2 bg-surface-container-highest/30 rounded-full overflow-hidden">
+                            <div className="h-2 bg-[#2c2c2e]est/30 rounded-full overflow-hidden">
                               <motion.div 
                                 initial={{ width: 0 }}
                                 animate={{ width: `${status.progress}%` }}
                                 className="h-full bg-primary-container shadow-[0_0_15px_rgba(0,229,255,0.4)]"
                               />
                             </div>
-                            <div className="flex justify-between font-mono text-[8px] text-on-surface-variant/50 uppercase tracking-widest">
+                            <div className="flex justify-between font-mono text-xs text-on-surface-variant/50  ">
                               <span>{status.startDate}</span>
                               <span>{status.endDate}</span>
                             </div>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
-                            <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
-                              <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Time Remaining</div>
-                              <div className="font-headline text-sm text-on-surface uppercase font-black">
+                            <div className="p-4 bg-[#2c2c2e]/50 border border-white/5">
+                              <div className="font-label text-[7px] text-on-surface-variant   mb-2">Time Remaining</div>
+                              <div className="font-sans font-semibold text-sm text-on-surface  font-bold">
                                 {status.remainingWeeks}W {status.remainingDays}D
                               </div>
                             </div>
-                            <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
-                              <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Phase Duration</div>
+                            <div className="p-4 bg-[#2c2c2e]/50 border border-white/5">
+                              <div className="font-label text-[7px] text-on-surface-variant   mb-2">Phase Duration</div>
                               <div className="flex items-center gap-2">
                                 {isEditingGoal ? (
                                   <input 
@@ -2557,12 +2855,12 @@ function App() {
                                     max="52"
                                     value={nutritionDurationWeeks}
                                     onChange={(e) => setNutritionDurationWeeks(parseInt(e.target.value) || 1)}
-                                    className="w-10 bg-transparent border-b border-primary-container/30 font-headline text-sm text-primary-container focus:border-primary-container outline-none font-black"
+                                    className="w-10 bg-transparent border-b border-primary-container/30 font-sans font-semibold text-sm text-primary-container focus:border-primary-container outline-none font-bold"
                                   />
                                 ) : (
-                                  <span className="font-headline text-sm text-on-surface font-black">{nutritionDurationWeeks}</span>
+                                  <span className="font-sans font-semibold text-sm text-on-surface font-bold">{nutritionDurationWeeks}</span>
                                 )}
-                                <span className="font-headline text-[10px] text-on-surface uppercase font-bold">Weeks</span>
+                                <span className="font-sans font-semibold text-sm text-on-surface  font-bold">Weeks</span>
                               </div>
                             </div>
                           </div>
@@ -2574,31 +2872,64 @@ function App() {
 
                 {/* Right Column: Configuration & History */}
                 <div className="space-y-8">
+                  {/* Fuel Area */}
+                  <div className="bg-[#1c1c1e] rounded-2xl p-6 border border-white/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5">
+                      <Utensils className="w-16 h-16" />
+                    </div>
+                    <h3 className="font-sans font-semibold text-xs font-bold   mb-6 flex items-center gap-2 text-primary-container">
+                      <Zap className="w-3 h-3" />
+                      Fuel Protocol
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-[#2c2c2e]/50 border border-white/5 ">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-label text-xs text-on-surface-variant  ">Pre-Workout Fuel</span>
+                          <span className="font-mono text-sm text-primary-container">300 KCAL</span>
+                        </div>
+                        <p className="text-sm text-on-surface  leading-tight">High glycemic carbs + 20g Protein. 45 min prior to engagement.</p>
+                      </div>
+                      <div className="p-4 bg-[#2c2c2e]/50 border border-white/5 ">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-label text-xs text-on-surface-variant  ">Post-Workout Recovery</span>
+                          <span className="font-mono text-sm text-primary-container">500 KCAL</span>
+                        </div>
+                        <p className="text-sm text-on-surface  leading-tight">Fast-acting protein + complex carbs. Immediate post-mission intake.</p>
+                      </div>
+                      <div className="p-4 bg-[#2c2c2e]/50 border border-white/5 ">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-label text-xs text-on-surface-variant  ">Hydration Protocol</span>
+                          <span className="font-mono text-sm text-primary-container">3.5L / DAY</span>
+                        </div>
+                        <p className="text-sm text-on-surface  leading-tight">Maintain electrolyte balance. 500ml upon wake-up.</p>
+                      </div>
+                    </div>
+                  </div>
                   {/* Target & Goal */}
-                  <div className="bg-surface-container-low p-6 border border-outline-variant/10 space-y-6">
+                  <div className="bg-[#1c1c1e] rounded-2xl p-6 border border-white/5 space-y-6">
                     <div className="flex justify-between items-center">
-                      <h3 className="font-headline text-xs font-black uppercase tracking-widest text-on-surface-variant">Phase Configuration</h3>
+                      <h3 className="font-sans font-semibold text-xs font-bold   text-on-surface-variant">Phase Configuration</h3>
                       <button 
                         onClick={() => setIsEditingGoal(!isEditingGoal)}
-                        className="flex items-center gap-2 px-3 py-1 text-[8px] font-black uppercase tracking-widest transition-all border bg-primary-container/10 text-primary-container border-primary-container/30 hover:bg-primary-container/20"
+                        className="flex items-center gap-2 px-3 py-1 text-xs font-bold   transition-all border bg-primary-container/10 text-primary-container border-primary-container/30 hover:bg-primary-container/20"
                       >
                         {isEditingGoal ? <Lock className="w-3 h-3" /> : <Edit2 className="w-3 h-3" />}
                         {isEditingGoal ? 'Lock' : 'Edit'}
                       </button>
                     </div>
                     
-                    <div className="flex justify-between items-center border-b border-outline-variant/10 pb-4">
-                      <h3 className="font-headline text-xs font-black uppercase tracking-widest text-on-surface-variant">Phase Goal</h3>
+                    <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                      <h3 className="font-sans font-semibold text-xs font-bold   text-on-surface-variant">Phase Goal</h3>
                       {isEditingGoal ? (
                         <div className="flex gap-1">
                           {(['CUT', 'BULK', 'MAINTAIN'] as const).map((goal) => (
                             <button
                               key={goal}
                               onClick={() => handleGoalChange(goal)}
-                              className={`px-3 py-1 text-[8px] font-black uppercase tracking-tighter transition-all border ${
+                              className={`px-3 py-1 text-xs font-bold   transition-all border ${
                                 nutritionGoal === goal 
                                   ? 'bg-primary-container text-on-primary-container border-primary-container' 
-                                  : 'bg-transparent text-on-surface-variant/50 border-outline-variant/20 hover:border-primary-container/30'
+                                  : 'bg-transparent text-on-surface-variant/50 border-white/5 hover:border-primary-container/30'
                               }`}
                             >
                               {goal}
@@ -2606,33 +2937,33 @@ function App() {
                           ))}
                         </div>
                       ) : (
-                        <div className="px-4 py-1 bg-primary-container/10 text-primary-container border border-primary-container/20 font-headline text-[10px] font-black uppercase tracking-widest">
+                        <div className="px-4 py-1 bg-primary-container/10 text-primary-container border border-primary-container/20 font-sans font-semibold text-sm font-bold  ">
                           {nutritionGoal}
                         </div>
                       )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
-                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Target Weight</div>
+                      <div className="p-4 bg-[#2c2c2e]/50 border border-white/5">
+                        <div className="font-label text-[7px] text-on-surface-variant   mb-2">Target Weight</div>
                         <div className="flex items-center gap-2">
                           {isEditingGoal ? (
                             <input 
                               type="number"
                               value={targetWeight}
                               onChange={(e) => setTargetWeight(parseFloat(e.target.value) || 0)}
-                              className="w-16 bg-transparent border-b border-primary-container/30 font-headline text-lg text-primary-container focus:border-primary-container outline-none"
+                              className="w-16 bg-transparent border-b border-primary-container/30 font-sans font-semibold text-lg text-primary-container focus:border-primary-container outline-none"
                             />
                           ) : (
-                            <span className="font-headline text-lg text-on-surface font-black">{targetWeight}</span>
+                            <span className="font-sans font-semibold text-lg text-on-surface font-bold">{targetWeight}</span>
                           )}
-                          <span className="font-headline text-xs text-on-surface uppercase font-bold">KG</span>
+                          <span className="font-sans font-semibold text-xs text-on-surface  font-bold">KG</span>
                         </div>
                       </div>
-                      <div className="p-4 bg-surface-container-high/50 border border-outline-variant/10">
-                        <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest mb-2">Protein Intensity</div>
+                      <div className="p-4 bg-[#2c2c2e]/50 border border-white/5">
+                        <div className="font-label text-[7px] text-on-surface-variant   mb-2">Protein Intensity</div>
                         <div className="flex flex-col gap-2">
-                          <div className="font-headline text-lg text-primary-container font-black">{proteinPerKg} <span className="text-[10px] opacity-50">G/KG</span></div>
+                          <div className="font-sans font-semibold text-lg text-primary-container font-bold">{proteinPerKg} <span className="text-sm opacity-50">G/KG</span></div>
                           {isEditingGoal && (
                             <input 
                               type="range"
@@ -2641,7 +2972,7 @@ function App() {
                               step="0.1"
                               value={proteinPerKg}
                               onChange={(e) => setProteinPerKg(parseFloat(e.target.value) || 0)}
-                              className="w-full h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary-container"
+                              className="w-full h-1 bg-[#2c2c2e]est rounded-lg appearance-none cursor-pointer accent-primary-container"
                             />
                           )}
                         </div>
@@ -2650,8 +2981,8 @@ function App() {
                   </div>
 
                   {/* Weight History List */}
-                  <div className="bg-surface-container-low p-6 border border-outline-variant/10">
-                    <h3 className="font-headline text-xs font-black uppercase tracking-widest mb-4 flex justify-between items-center">
+                  <div className="bg-[#1c1c1e] rounded-2xl p-6 border border-white/5">
+                    <h3 className="font-sans font-semibold text-xs font-bold   mb-4 flex justify-between items-center">
                       <span>Weight History</span>
                       {weightHistory.length > 1 && (
                         <div className="flex items-center gap-1">
@@ -2671,15 +3002,15 @@ function App() {
                     </h3>
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                       {weightHistory.length === 0 ? (
-                        <div className="text-center py-12 border border-dashed border-outline-variant/20">
-                          <p className="text-[8px] text-on-surface-variant uppercase tracking-widest opacity-30">Awaiting biometric data...</p>
+                        <div className="text-center py-12 border border-dashed border-white/5">
+                          <p className="text-xs text-on-surface-variant   opacity-30">Awaiting biometric data...</p>
                         </div>
                       ) : (
                         weightHistory.map((entry) => (
-                          <div key={entry.id} className="flex justify-between items-center p-3 bg-surface-container-high/30 border border-outline-variant/5 group hover:bg-surface-container-high transition-colors">
+                          <div key={entry.id} className="flex justify-between items-center p-3 bg-[#2c2c2e]/30 border border-outline-variant/5 group hover:bg-[#2c2c2e] transition-colors">
                             <div>
                               <div className="font-mono text-[11px] text-on-surface font-bold">{entry.weight} KG</div>
-                              <div className="font-label text-[7px] text-on-surface-variant uppercase tracking-widest">{format(parseISO(entry.date), 'MMM dd, yyyy')}</div>
+                              <div className="font-label text-[7px] text-on-surface-variant  ">{format(parseISO(entry.date), 'MMM dd, yyyy')}</div>
                             </div>
                             <button 
                               onClick={() => deleteWeightEntry(entry.id)}
@@ -2700,9 +3031,9 @@ function App() {
                     </div>
                     <div className="flex items-center gap-3 text-primary-container mb-4">
                       <Zap className="w-5 h-5" />
-                      <h3 className="font-headline text-sm font-black uppercase tracking-widest">Strategic Protocol Insight</h3>
+                      <h3 className="font-sans font-semibold text-sm font-bold  ">Strategic Protocol Insight</h3>
                     </div>
-                    <p className="text-xs text-on-surface-variant leading-relaxed uppercase max-w-2xl">
+                    <p className="text-xs text-on-surface-variant leading-relaxed  max-w-2xl">
                       {nutritionGoal === 'BULK' && "Current objective: Mass Accumulation. Focus on a slight caloric surplus (250-500 kcal). Prioritize consistent protein intake to maximize muscle protein synthesis. Progressive overload in the 8-12 rep range is critical."}
                       {nutritionGoal === 'CUT' && "Current objective: Adipose Reduction. Maintain a caloric deficit while keeping protein high (2.2g/kg+) to preserve lean tissue. Monitor strength levels closely; any significant drop indicates excessive deficit."}
                       {nutritionGoal === 'MAINTAIN' && "Current objective: Body Recomposition. Maintain current caloric intake while optimizing training intensity. Focus on nutrient timing around training windows to improve performance and recovery."}
@@ -2710,15 +3041,59 @@ function App() {
                     <div className="mt-8 flex gap-4">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse"></div>
-                        <span className="font-label text-[8px] text-primary-container uppercase tracking-widest">System Active</span>
+                        <span className="font-label text-xs text-primary-container  ">System Active</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-on-surface-variant/20"></div>
-                        <span className="font-label text-[8px] text-on-surface-variant/50 uppercase tracking-widest">Auto-Sync Enabled</span>
+                        <span className="font-label text-xs text-on-surface-variant/50  ">Auto-Sync Enabled</span>
                       </div>
                     </div>
                   </div>
                 </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'Video Library' && (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-8"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <Youtube className="w-6 h-6 text-primary glow-primary" />
+                  <h2 className="font-sans font-semibold text-xl font-bold text-on-surface  ">Video Archive</h2>
+                </div>
+                <div className="text-xs font-mono text-primary/70  px-3 py-1 bg-primary/5">
+                  DATA.COUNT: {videoIds.length}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {videoIds.map((id) => (
+                  <motion.div
+                    key={id}
+                    whileHover={{ y: -4, scale: 1.02 }}
+                    className="group relative aspect-video bg-[#2c2c2e] rounded-2xl overflow-hidden cursor-pointer  transition-all duration-300 hover:border-primary/50 hover:shadow-[0_0_15px_rgba(0,229,255,0.15)]"
+                    onClick={() => setActiveVideoUrl(`https://www.youtube.com/watch?v=${id}`)}
+                  >
+                    <img
+                      src={`https://img.youtube.com/vi/${id}/hqdefault.jpg`}
+                      alt="Video thumbnail"
+                      className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-300 grayscale-[0.5] group-hover:grayscale-0"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-transparent transition-colors duration-300">
+                      <div className="w-10 h-10 bg-primary/20 border border-primary/50 rounded-full flex items-center justify-center backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all transform group-hover:scale-110 duration-300 glow-primary">
+                        <Play className="w-4 h-4 text-primary ml-1" />
+                      </div>
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <p className="text-sm font-mono text-primary/80 truncate">ID: {id}</p>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             </motion.div>
           )}
@@ -2729,15 +3104,15 @@ function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-outline-variant/20 pb-6 gap-6">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 gap-6">
                 <div>
-                  <span className="font-label text-primary-container text-[10px] tracking-[0.4em] uppercase">Biometric Analysis</span>
-                  <h1 className="font-headline text-3xl md:text-5xl font-black text-on-surface tracking-tighter uppercase mt-2">Operator Stats</h1>
+                  <span className="font-label text-primary-container text-sm tracking-[0.4em] ">Biometric Analysis</span>
+                  <h1 className="font-sans font-semibold text-3xl md:text-5xl font-bold text-on-surface   mt-2">Operator Stats</h1>
                 </div>
                 {selectedArchiveDate && (
                   <button 
                     onClick={() => setSelectedArchiveDate(null)}
-                    className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-[10px] font-black text-primary-container uppercase tracking-widest hover:bg-primary-container/20 transition-all"
+                    className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-sm font-bold text-primary-container   hover:bg-primary-container/20 transition-all"
                   >
                     <RefreshCw className="w-3 h-3" />
                     Reset to Global Stats
@@ -2749,7 +3124,7 @@ function App() {
                 {stats.map((stat) => (
                   <div 
                     key={stat.label} 
-                    className={`bg-surface-container-low p-6 border border-outline-variant/10 transition-all ${stat.label.includes('Volume') ? 'cursor-pointer hover:bg-surface-container-high hover:border-primary-container/30 group' : ''}`}
+                    className={`bg-[#1c1c1e] p-6 border border-white/5 transition-all ${stat.label.includes('Volume') ? 'cursor-pointer hover:bg-[#2c2c2e] hover:border-primary-container/30 group' : ''}`}
                     onClick={() => {
                       if (stat.label.includes('Volume') && stat.numericValue !== undefined) {
                         setComparisonModal({ isOpen: true, weight: stat.numericValue, label: stat.label });
@@ -2758,21 +3133,21 @@ function App() {
                   >
                     <div className="flex justify-between items-start mb-4">
                       <stat.icon className={`w-6 h-6 ${stat.color} ${stat.label.includes('Volume') ? 'group-hover:scale-110 transition-transform' : ''}`} />
-                      <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">{stat.label}</div>
+                      <div className="font-label text-xs text-on-surface-variant  ">{stat.label}</div>
                     </div>
-                    <div className="font-headline text-3xl font-black text-on-surface uppercase tracking-tighter flex items-baseline gap-2">
+                    <div className="font-sans font-semibold text-3xl font-bold text-on-surface   flex items-baseline gap-2">
                       {stat.value}
                       {stat.label.includes('Volume') && (
-                        <span className="text-[8px] text-primary-container opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest">Compare</span>
+                        <span className="text-xs text-primary-container opacity-0 group-hover:opacity-100 transition-opacity  ">Compare</span>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="bg-surface-container-low p-6 md:p-8 border border-outline-variant/10">
+              <div className="bg-[#1c1c1e] rounded-2xl p-6 md:p-8 border border-white/5">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                  <h3 className="font-headline text-lg font-bold uppercase tracking-widest text-primary-container">Performance Matrix</h3>
+                  <h3 className="font-sans font-semibold text-lg font-bold   text-primary-container">Performance Matrix</h3>
                   <div className="flex gap-4">
                     {[
                       { label: 'Completed', color: 'bg-primary-container' },
@@ -2781,7 +3156,7 @@ function App() {
                     ].map(item => (
                       <div key={item.label} className="flex items-center gap-2">
                         <div className={`w-2 h-2 ${item.color}`} />
-                        <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">{item.label}</span>
+                        <span className="font-label text-xs text-on-surface-variant  ">{item.label}</span>
                       </div>
                     ))}
                   </div>
@@ -2789,7 +3164,7 @@ function App() {
 
                 <div className="relative h-64 flex gap-4">
                   {/* Y-Axis */}
-                  <div className="flex flex-col justify-between text-[8px] font-mono text-on-surface-variant/40 uppercase py-1 h-full border-r border-outline-variant/10 pr-2">
+                  <div className="flex flex-col justify-between text-xs font-mono text-on-surface-variant/40  py-1 h-full border-r border-white/5 pr-2">
                     <span>100%</span>
                     <span>75%</span>
                     <span>50%</span>
@@ -2825,7 +3200,7 @@ function App() {
                       return (
                         <div key={i} className="flex-1 flex flex-col items-center gap-4 h-full">
                           <div 
-                            className={`w-full bg-surface-container-high/30 relative group h-full flex items-end cursor-pointer transition-all ${
+                            className={`w-full bg-[#2c2c2e]/30 relative group h-full flex items-end cursor-pointer transition-all ${
                               selectedArchiveDate && isSameDay(date, selectedArchiveDate) ? 'ring-1 ring-primary-container bg-primary-container/5' : ''
                             }`}
                             onClick={() => {
@@ -2837,12 +3212,12 @@ function App() {
                             }}
                           >
                             {/* Tooltip */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-24 p-2 bg-surface-container-highest border border-primary-container/30 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
-                              <div className="text-[8px] text-primary-container font-black uppercase tracking-widest mb-1">{formattedDate}</div>
-                              <div className="text-[10px] text-on-surface uppercase font-bold">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-24 p-2 bg-[#2c2c2e]est border border-primary-container/30 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-center">
+                              <div className="text-xs text-primary-container font-bold   mb-1">{formattedDate}</div>
+                              <div className="text-sm text-on-surface  font-bold">
                                 {dayEntry ? `${height}%` : 'NO INTEL'}
                               </div>
-                              <div className="text-[7px] text-on-surface-variant uppercase mt-1">
+                              <div className="text-[7px] text-on-surface-variant  mt-1">
                                 {dayEntry?.type || 'IDLE'}
                               </div>
                             </div>
@@ -2859,15 +3234,81 @@ function App() {
                               }`}
                             >
                               {height > 0 && (
-                                <div className="absolute inset-0 scanline-overlay opacity-20"></div>
+                                <div className="absolute inset-0  opacity-20"></div>
                               )}
                             </motion.div>
                           </div>
-                          <span className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest">{dayLabel}</span>
+                          <span className="font-label text-xs text-on-surface-variant  ">{dayLabel}</span>
                         </div>
                       );
                     })}
                   </div>
+                </div>
+              </div>
+
+              {/* Muscle Rankings Section */}
+              <div className="bg-[#1c1c1e] rounded-2xl p-6 md:p-8 border border-white/5">
+                <div className="flex justify-between items-center mb-8">
+                  <div>
+                    <span className="font-label text-primary-container text-xs tracking-[0.4em] ">Sector Analysis</span>
+                    <h3 className="font-sans font-semibold text-lg font-bold   text-on-surface">Muscle Rankings</h3>
+                  </div>
+                  <div className="flex gap-2">
+                    {['Platinum', 'Diamond', 'Master', 'Legend'].map(rank => (
+                      <div key={rank} className="flex items-center gap-1">
+                        <Shield className="w-2 h-2 text-primary-container/40" />
+                        <span className="text-[6px] text-on-surface-variant  ">{rank}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {[
+                    { muscle: 'Chest', xp: 1240, rank: 'Silver I', focus: weakpointFocus === 'Chest' },
+                    { muscle: 'Biceps', xp: 720, rank: 'Bronze III', focus: weakpointFocus === 'Arms' },
+                    { muscle: 'Lats', xp: 0, rank: 'Untrained', focus: weakpointFocus === 'Back' },
+                    { muscle: 'Quadriceps', xp: 1100, rank: 'Silver I', focus: weakpointFocus === 'Legs' },
+                    { muscle: 'Shoulders', xp: 880, rank: 'Silver I', focus: weakpointFocus === 'Shoulders' },
+                    { muscle: 'Hamstrings', xp: 740, rank: 'Bronze III', focus: false },
+                  ].map((item) => (
+                    <div 
+                      key={item.muscle}
+                      className={`p-4 border border-white/5 transition-all relative overflow-hidden group ${item.focus ? 'bg-primary-container/5 border-primary-container/20' : 'bg-[#2c2c2e]/30'}`}
+                    >
+                      <div className="flex justify-between items-center relative z-10">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 border ${item.focus ? 'border-primary-container/30 bg-primary-container/10' : 'border-white/5 bg-[#2c2c2e]est/30'}`}>
+                            <Activity className={`w-4 h-4 ${item.focus ? 'text-primary-container' : 'text-on-surface-variant'}`} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-sans font-semibold text-sm font-bold text-on-surface  ">{item.muscle}</span>
+                              {item.focus && (
+                                <span className="bg-primary-container/10 text-primary-container text-[6px] px-1.5 py-0.5 border border-primary-container/30  font-bold ">
+                                  Focus
+                                </span>
+                              )}
+                            </div>
+                            <div className="h-1 w-32 bg-[#2c2c2e]est mt-2 overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.min(100, (item.xp / 2000) * 100)}%` }}
+                                className={`h-full ${item.focus ? 'bg-primary-container' : 'bg-on-surface-variant/40'}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-label text-xs text-on-surface-variant   mb-1">{item.rank}</div>
+                          <div className="font-mono text-sm text-primary-container font-bold">{item.xp} XP</div>
+                        </div>
+                      </div>
+                      {item.focus && (
+                        <div className="absolute inset-0  opacity-5 pointer-events-none" />
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </motion.div>
@@ -2890,27 +3331,27 @@ function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md bg-surface-container-low border border-error/30 p-8 shadow-[0_0_50px_rgba(255,82,82,0.15)]"
+              className="relative w-full max-w-md bg-[#1c1c1e] border border-error/30 p-8 shadow-[0_0_50px_rgba(255,82,82,0.15)]"
             >
               <div className="flex items-center gap-4 text-error mb-6">
                 <AlertTriangle className="w-8 h-8" />
-                <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">CRITICAL PURGE</h3>
+                <h3 className="font-sans font-semibold text-2xl font-bold  ">CRITICAL PURGE</h3>
               </div>
               
-              <p className="text-on-surface-variant text-sm leading-relaxed mb-8 uppercase tracking-wide">
+              <p className="text-on-surface-variant text-sm leading-relaxed mb-8  tracking-wide">
                 THIS ACTION WILL PERMANENTLY ERASE ALL ARCHIVED DATA, CURRENT PROGRESS, AND TRAINING SCHEDULES. THIS IS A FACTORY RESET OF THE SOVEREIGN PROTOCOL.
               </p>
 
               <div className="space-y-3">
                 <button 
                   onClick={clearArchive}
-                  className="w-full bg-error text-on-error py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+                  className="w-full bg-error text-on-error py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:brightness-110 transition-all"
                 >
                   CONFIRM FACTORY RESET
                 </button>
                 <button 
                   onClick={() => setShowPurgeModal(false)}
-                  className="w-full bg-surface-container-high text-on-surface py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:bg-surface-container-highest transition-all"
+                  className="w-full bg-[#2c2c2e] text-on-surface py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:bg-[#2c2c2e]est transition-all"
                 >
                   ABORT SEQUENCE
                 </button>
@@ -2935,20 +3376,20 @@ function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-sm bg-surface-container-low border border-emerald-500/30 p-8 shadow-[0_0_50px_rgba(16,185,129,0.1)]"
+              className="relative w-full max-w-sm bg-[#1c1c1e] border border-emerald-500/30 p-8 shadow-[0_0_50px_rgba(16,185,129,0.1)]"
             >
               <div className="flex items-center gap-4 text-emerald-400 mb-6">
                 <Shield className="w-8 h-8" />
-                <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">RECOVERY ACTIVE</h3>
+                <h3 className="font-sans font-semibold text-2xl font-bold  ">RECOVERY ACTIVE</h3>
               </div>
               
-              <p className="text-on-surface-variant text-sm leading-relaxed mb-8 uppercase tracking-wide">
+              <p className="text-on-surface-variant text-sm leading-relaxed mb-8  tracking-wide">
                 CURRENTLY REST DAY ACTIVE. SYSTEM IS IN STANDBY MODE. NO OBJECTIVES ASSIGNED FOR THIS CYCLE.
               </p>
 
               <button 
                 onClick={() => setIsRestDayModalOpen(false)}
-                className="w-full bg-emerald-500 text-on-emerald py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+                className="w-full bg-emerald-500 text-on-emerald py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:brightness-110 transition-all"
               >
                 ACKNOWLEDGE
               </button>
@@ -2972,20 +3413,20 @@ function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-sm bg-surface-container-low border border-primary-container/30 p-8 shadow-[0_0_50px_rgba(0,229,255,0.2)]"
+              className="relative w-full max-w-sm bg-[#1c1c1e] border border-primary-container/30 p-8 shadow-[0_0_50px_rgba(0,229,255,0.2)]"
             >
               <div className="flex items-center gap-4 text-primary-container mb-6">
                 <Rocket className="w-8 h-8" />
-                <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">PROTOCOL ENGAGED</h3>
+                <h3 className="font-sans font-semibold text-2xl font-bold  ">PROTOCOL ENGAGED</h3>
               </div>
               
-              <p className="text-on-surface-variant text-sm leading-relaxed mb-8 uppercase tracking-wide">
+              <p className="text-on-surface-variant text-sm leading-relaxed mb-8  tracking-wide">
                 DAILY QUEST INITIALIZED. ALL OBJECTIVES ARE NOW UNLOCKED. SYSTEM IS TRACKING PERFORMANCE.
               </p>
 
               <button 
                 onClick={() => setIsWorkoutInitModalOpen(false)}
-                className="w-full bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+                className="w-full bg-primary-container text-on-primary-container py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:brightness-110 transition-all"
               >
                 BEGIN MISSION
               </button>
@@ -3009,7 +3450,7 @@ function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md bg-surface-container-low border border-primary-container/30 p-8 shadow-[0_0_50px_rgba(0,229,255,0.15)] overflow-hidden"
+              className="relative w-full max-w-md bg-[#1c1c1e] border border-primary-container/30 p-8 shadow-[0_0_50px_rgba(0,229,255,0.15)] overflow-hidden"
             >
               {/* Background Decoration */}
               <div className="absolute -right-12 -top-12 opacity-5">
@@ -3019,30 +3460,30 @@ function App() {
               <div className="relative z-10">
                 <div className="flex items-center gap-4 text-primary-container mb-6">
                   <Activity className="w-8 h-8" />
-                  <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">Volume Comparison</h3>
+                  <h3 className="font-sans font-semibold text-2xl font-bold  ">Volume Comparison</h3>
                 </div>
                 
                 <div className="space-y-6">
                   <div>
-                    <div className="font-label text-[10px] text-on-surface-variant uppercase tracking-widest mb-1">{comparisonModal.label}</div>
-                    <div className="font-headline text-4xl font-black text-primary-container">{comparisonModal.weight.toLocaleString()} KG</div>
+                    <div className="font-label text-sm text-on-surface-variant   mb-1">{comparisonModal.label}</div>
+                    <div className="font-sans font-semibold text-4xl font-bold text-primary-container">{comparisonModal.weight.toLocaleString()} KG</div>
                   </div>
 
                   <div className="bg-primary-container/5 border border-primary-container/20 p-6 relative">
                     <div className="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
-                    <div className="font-label text-[8px] text-primary-container uppercase tracking-[0.3em] mb-3">Equivalent Mass</div>
-                    <div className="font-headline text-xl font-black text-on-surface uppercase tracking-tight leading-tight italic">
+                    <div className="font-label text-xs text-primary-container  tracking-[0.3em] mb-3">Equivalent Mass</div>
+                    <div className="font-sans font-semibold text-xl font-bold text-on-surface   leading-tight italic">
                       "You've lifted the equivalent of {getWeightComparison(comparisonModal.weight)}."
                     </div>
                   </div>
 
-                  <p className="text-on-surface-variant text-[10px] uppercase tracking-widest leading-relaxed">
+                  <p className="text-on-surface-variant text-sm   leading-relaxed">
                     This represents the total gravitational force overcome during your training cycle. Your physical output is reaching critical levels.
                   </p>
 
                   <button 
                     onClick={() => setComparisonModal(null)}
-                    className="w-full bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all mt-4"
+                    className="w-full bg-primary-container text-on-primary-container py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:brightness-110 transition-all mt-4"
                   >
                     Acknowledge Intel
                   </button>
@@ -3068,12 +3509,12 @@ function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-2xl bg-surface-container-low border border-primary-container/30 p-6 md:p-8 shadow-[0_0_50px_rgba(0,229,255,0.15)] max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-2xl bg-[#1c1c1e] border border-primary-container/30 p-6 md:p-8 shadow-[0_0_50px_rgba(0,229,255,0.15)] max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-4 text-primary-container">
                   <History className="w-8 h-8" />
-                  <h3 className="font-headline text-2xl font-black uppercase tracking-tighter">Edit Protocol Data</h3>
+                  <h3 className="font-sans font-semibold text-2xl font-bold  ">Edit Protocol Data</h3>
                 </div>
                 <button 
                   onClick={() => setEditingArchiveEntry(null)}
@@ -3086,30 +3527,30 @@ function App() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="md:col-span-1">
-                    <label className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest block mb-2">Protocol Details</label>
+                    <label className="font-label text-xs text-on-surface-variant   block mb-2">Protocol Details</label>
                     <input 
                       type="text" 
                       value={editingArchiveEntry.details}
                       onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, details: e.target.value})}
-                      className="w-full bg-surface-container-high border border-outline-variant/20 p-3 font-headline text-xs uppercase tracking-tight text-on-surface focus:border-primary-container outline-none transition-all"
+                      className="w-full bg-[#2c2c2e] border border-white/5 p-3 font-sans font-semibold text-xs   text-on-surface focus:border-primary-container outline-none transition-all"
                     />
                   </div>
                   <div>
-                    <label className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest block mb-2">Duration (sec)</label>
+                    <label className="font-label text-xs text-on-surface-variant   block mb-2">Duration (sec)</label>
                     <input 
                       type="number" 
                       value={editingArchiveEntry.duration || 0}
                       onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, duration: parseInt(e.target.value) || 0})}
-                      className="w-full bg-surface-container-high border border-outline-variant/20 p-3 font-headline text-xs uppercase tracking-tight text-on-surface focus:border-primary-container outline-none transition-all"
+                      className="w-full bg-[#2c2c2e] border border-white/5 p-3 font-sans font-semibold text-xs   text-on-surface focus:border-primary-container outline-none transition-all"
                     />
                   </div>
                   <div>
-                    <label className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest block mb-2">Status</label>
+                    <label className="font-label text-xs text-on-surface-variant   block mb-2">Status</label>
                     <select 
                       value={editingArchiveEntry.type}
                       onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, type: e.target.value as 'COMPLETED' | 'INCOMPLETE' | 'BREACH'})}
-                      className={`w-full bg-surface-container-high border p-3 font-headline text-xs uppercase tracking-tight text-on-surface focus:border-primary-container outline-none transition-all ${
-                        editingArchiveEntry.type === 'BREACH' ? 'border-error/50 text-error' : 'border-outline-variant/20'
+                      className={`w-full bg-[#2c2c2e] border p-3 font-sans font-semibold text-xs   text-on-surface focus:border-primary-container outline-none transition-all ${
+                        editingArchiveEntry.type === 'BREACH' ? 'border-error/50 text-error' : 'border-white/5'
                       }`}
                     >
                       <option value="COMPLETED">COMPLETED</option>
@@ -3121,9 +3562,9 @@ function App() {
 
                 {editingArchiveEntry.exercises && (
                   <div className="space-y-4">
-                    <div className="font-label text-[8px] text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/10 pb-1">Exercise Intel Modification</div>
+                    <div className="font-label text-xs text-on-surface-variant   border-b border-white/5 pb-1">Exercise Intel Modification</div>
                     {editingArchiveEntry.exercises.map((ex, exIdx) => (
-                      <div key={ex.id} className="bg-surface-container-high p-4 border border-outline-variant/10 space-y-4">
+                      <div key={ex.id} className="bg-[#2c2c2e] rounded-2xl p-4 border border-white/5 space-y-4">
                         <div className="flex justify-between items-center">
                           <input 
                             type="text" 
@@ -3133,7 +3574,7 @@ function App() {
                               newExercises[exIdx] = { ...ex, name: e.target.value };
                               setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                             }}
-                            className="bg-transparent border-b border-outline-variant/20 font-headline font-bold uppercase tracking-tight text-[10px] w-1/2 focus:border-primary-container outline-none"
+                            className="bg-transparent border-b border-white/5 font-sans font-semibold font-bold   text-sm w-1/2 focus:border-primary-container outline-none"
                           />
                           <button 
                             onClick={() => {
@@ -3149,10 +3590,10 @@ function App() {
                         {ex.setData ? (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {ex.setData.map((s, sIdx) => (
-                              <div key={sIdx} className="flex items-center gap-3 p-2 bg-surface-container-highest/20 border border-outline-variant/10 rounded">
-                                <span className="font-headline text-[8px] font-bold text-primary-container">{sIdx + 1}</span>
+                              <div key={sIdx} className="flex items-center gap-3 p-2 bg-[#2c2c2e]est/20 border border-white/5 rounded">
+                                <span className="font-sans font-semibold text-xs font-bold text-primary-container">{sIdx + 1}</span>
                                 <div className="flex flex-col gap-1">
-                                  <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Weight</label>
+                                  <label className="text-[6px] text-on-surface-variant/50  ">Weight</label>
                                   <input 
                                     type="text" 
                                     value={s.weight}
@@ -3163,12 +3604,12 @@ function App() {
                                       newExercises[exIdx] = { ...ex, setData: newSetData };
                                       setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                     }}
-                                    className="w-20 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                    className="w-20 bg-[#2c2c2e]est border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                     placeholder="Weight"
                                   />
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                  <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Reps</label>
+                                  <label className="text-[6px] text-on-surface-variant/50  ">Reps</label>
                                   <input 
                                     type="text"
                                     inputMode="numeric"
@@ -3181,7 +3622,7 @@ function App() {
                                       newExercises[exIdx] = { ...ex, setData: newSetData };
                                       setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                     }}
-                                    className="w-16 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                    className="w-16 bg-[#2c2c2e]est border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                     placeholder="Reps"
                                   />
                                 </div>
@@ -3205,7 +3646,7 @@ function App() {
                                 newExercises[exIdx] = { ...ex, setData: newSetData, sets: newSetData.length.toString() };
                                 setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                               }}
-                              className="col-span-full py-2 border border-dashed border-outline-variant/20 text-[8px] uppercase tracking-widest text-on-surface-variant hover:bg-surface-container-highest/20 transition-all"
+                              className="col-span-full py-2 border border-dashed border-white/5 text-xs   text-on-surface-variant hover:bg-[#2c2c2e]est/20 transition-all"
                             >
                               + Add Set
                             </button>
@@ -3213,7 +3654,7 @@ function App() {
                         ) : (
                           <div className="flex flex-wrap gap-4">
                             <div className="flex flex-col gap-1">
-                              <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Sets</label>
+                              <label className="text-[6px] text-on-surface-variant/50  ">Sets</label>
                               <input 
                                 type="text" 
                                 value={ex.sets}
@@ -3222,12 +3663,12 @@ function App() {
                                   newExercises[exIdx] = { ...ex, sets: e.target.value };
                                   setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                 }}
-                                className="w-16 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                className="w-16 bg-[#2c2c2e]est border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                 placeholder="Sets"
                               />
                             </div>
                             <div className="flex flex-col gap-1">
-                              <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Weight</label>
+                              <label className="text-[6px] text-on-surface-variant/50  ">Weight</label>
                               <input 
                                 type="text" 
                                 value={ex.weight}
@@ -3236,12 +3677,12 @@ function App() {
                                   newExercises[exIdx] = { ...ex, weight: e.target.value };
                                   setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                 }}
-                                className="w-24 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                className="w-24 bg-[#2c2c2e]est border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                 placeholder="Weight"
                               />
                             </div>
                             <div className="flex flex-col gap-1">
-                              <label className="text-[6px] text-on-surface-variant/50 uppercase tracking-widest">Reps</label>
+                              <label className="text-[6px] text-on-surface-variant/50  ">Reps</label>
                               <input 
                                 type="text"
                                 inputMode="numeric"
@@ -3252,7 +3693,7 @@ function App() {
                                   newExercises[exIdx] = { ...ex, reps: val };
                                   setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                 }}
-                                className="w-16 bg-surface-container-highest border border-outline-variant/20 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                className="w-16 bg-[#2c2c2e]est border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                 placeholder="Reps"
                               />
                             </div>
@@ -3264,7 +3705,7 @@ function App() {
                                 newExercises[exIdx] = { ...ex, setData: newSetData };
                                 setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                               }}
-                              className="mt-auto mb-1 text-[8px] uppercase tracking-widest text-primary-container/60 hover:text-primary-container transition-colors"
+                              className="mt-auto mb-1 text-xs   text-primary-container/60 hover:text-primary-container transition-colors"
                             >
                               Convert to Per-Set
                             </button>
@@ -3285,7 +3726,7 @@ function App() {
                         });
                         setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                       }}
-                      className="w-full py-4 border border-dashed border-outline-variant/20 text-[10px] uppercase tracking-widest text-primary-container hover:bg-primary-container/5 transition-all flex items-center justify-center gap-2"
+                      className="w-full py-4 border border-dashed border-white/5 text-sm   text-primary-container hover:bg-primary-container/5 transition-all flex items-center justify-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
                       Add Exercise to Entry
@@ -3296,13 +3737,13 @@ function App() {
                 <div className="flex gap-4 pt-4">
                   <button 
                     onClick={() => saveArchiveEdit(editingArchiveEntry)}
-                    className="flex-grow bg-primary-container text-on-primary-container py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:brightness-110 transition-all"
+                    className="flex-grow bg-primary-container text-on-primary-container py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:brightness-110 transition-all"
                   >
                     Commit Changes
                   </button>
                   <button 
                     onClick={() => deleteArchiveEntry(editingArchiveEntry.id)}
-                    className="px-6 bg-error/10 text-error border border-error/20 py-4 font-headline text-[10px] font-black tracking-[0.3em] uppercase hover:bg-error/20 transition-all"
+                    className="px-6 bg-error/10 text-error border border-error/20 py-4 font-sans font-semibold text-sm font-bold tracking-[0.3em]  hover:bg-error/20 transition-all"
                   >
                     Purge Entry
                   </button>
@@ -3313,14 +3754,347 @@ function App() {
         )}
       </AnimatePresence>
 
+          {/* Roadmap Modal */}
+          <AnimatePresence>
+            {isRoadmapOpen && selectedProgramId && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-background/95 backdrop-blur-xl"
+                  onClick={() => setIsRoadmapOpen(false)}
+                />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="relative w-full max-w-5xl max-h-[90vh] bg-[#121212] border border-outline-variant overflow-hidden flex flex-col shadow-2xl"
+                >
+                  <div className="p-6 border-b border-outline-variant flex justify-between items-center bg-[#2c2c2e]">
+                    <div>
+                      <span className="font-label text-primary-container text-sm tracking-[0.4em] ">Protocol Roadmap</span>
+                      <h2 className="font-sans font-semibold text-2xl font-bold text-on-surface   mt-1">
+                        {PROGRAMS.find(p => p.id === selectedProgramId)?.name}
+                      </h2>
+                    </div>
+                    <button onClick={() => setIsRoadmapOpen(false)} className="p-2 hover:bg-[#2c2c2e]est transition-all">
+                      <XCircle className="w-6 h-6 text-on-surface-variant" />
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {Array.from({ length: PROGRAMS.find(p => p.id === selectedProgramId)?.totalWeeks || 0 }).map((_, i) => {
+                        const weekNum = i + 1;
+                        const program = PROGRAMS.find(p => p.id === selectedProgramId);
+                        let weekData = null;
+                        for (const range in program?.weeks) {
+                          const [start, end] = range.split('-').map(Number);
+                          if (end ? (weekNum >= start && weekNum <= end) : (weekNum === start)) {
+                            weekData = program?.weeks[range];
+                            break;
+                          }
+                        }
+                        
+                        return (
+                          <div key={weekNum} className={`relative p-6 border transition-all duration-300 ${
+                            weekNum === getProgramCurrentCycle() 
+                              ? 'border-primary-container bg-primary-container/5 shadow-[0_0_30px_rgba(0,229,255,0.05)]' 
+                              : 'border-white/10 bg-[#1c1c1e] hover:border-white/20'
+                          }`}>
+                            <div className="flex justify-between items-center mb-6">
+                              <div className="flex flex-col">
+                                <span className="font-sans font-semibold text-2xl font-bold text-on-surface ">CYCLE {weekNum}</span>
+                                <div className="h-1 w-12 bg-primary-container mt-1" />
+                              </div>
+                              {weekNum === getProgramCurrentCycle() && (
+                                <div className="flex items-center gap-2 bg-primary-container text-on-primary-container px-3 py-1">
+                                  <Zap className="w-3 h-3 animate-pulse" />
+                                  <span className="text-sm font-bold  ">Active</span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-6">
+                              {DAYS.map(day => {
+                                const exercises = weekData?.days[day] || [];
+                                if (exercises.length === 0) return null;
+                                const dayLabel = program?.dayLabels?.[day];
+                                
+                                return (
+                                  <div key={day} className="group/day">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="font-sans font-semibold text-sm text-on-surface-variant font-bold   group-hover/day:text-primary-container transition-colors">
+                                        {day}
+                                      </div>
+                                      {dayLabel && (
+                                        <div className="font-label text-xs text-primary-container/60 font-bold   border border-primary-container/20 px-2 py-0.5">
+                                          {dayLabel}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="space-y-1.5 pl-3 border-l border-white/10 group-hover/day:border-primary-container/30 transition-colors">
+                                      {exercises.map((ex, exIdx) => (
+                                        <div key={exIdx} className="flex items-start gap-2">
+                                          <div className="w-1 h-1 rounded-full bg-primary-container/40 mt-1.5" />
+                                          <div className="flex flex-col">
+                                            <span className="text-[11px] text-on-surface font-bold  tracking-wide leading-tight">
+                                              {ex.name}
+                                            </span>
+                                            <span className="text-[9px] text-on-surface-variant/70  ">
+                                              {ex.sets}x{ex.reps} • {ex.target}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+      {/* Program Selection Modal */}
+      <AnimatePresence>
+        {isProgramModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsProgramModalOpen(false)}
+              className="absolute inset-0 bg-[#1c1c1e]est/90 backdrop-blur-xl"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#1c1c1e] border border-primary-container/20 shadow-[0_0_50px_rgba(0,229,255,0.1)] overflow-hidden"
+            >
+              <div className="p-8 border-b border-white/5 flex justify-between items-center">
+                <div>
+                  <span className="font-label text-primary-container text-xs tracking-[0.4em] ">Selection Matrix</span>
+                  <h2 className="font-sans font-semibold text-2xl font-bold text-on-surface   mt-1">Available Programs</h2>
+                </div>
+                <button onClick={() => setIsProgramModalOpen(false)} className="text-on-surface-variant hover:text-on-surface">
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                {PROGRAMS.map(program => (
+                  <div 
+                    key={program.id}
+                    className="bg-[#2c2c2e] rounded-2xl p-6 border border-white/5 hover:border-primary-container/30 transition-all group cursor-pointer"
+                    onClick={() => {
+                      setPendingProgramId(program.id);
+                      setIsProgramModalOpen(false);
+                      setIsScheduleConfigModalOpen(true);
+                    }}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="font-sans font-semibold text-xl font-bold text-on-surface  group-hover:text-primary-container transition-colors">{program.name}</h3>
+                      <span className="font-label text-xs text-primary-container border border-primary-container/30 px-2 py-1  ">{program.author}</span>
+                    </div>
+                    <p className="text-sm text-on-surface-variant   leading-relaxed opacity-70 mb-6">
+                      {program.description}
+                    </p>
+                    <div className="flex items-center gap-2 text-primary-container font-sans font-semibold text-xs font-bold  ">
+                      Initialize Protocol <ChevronRight className="w-3 h-3" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Video Player Modal */}
+      <AnimatePresence>
+        {activeVideoUrl && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveVideoUrl(null)}
+              className="absolute inset-0 bg-[#1c1c1e]est/95 backdrop-blur-2xl"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative w-full max-w-4xl aspect-video bg-black border border-primary-container/20 shadow-[0_0_100px_rgba(0,229,255,0.2)]"
+            >
+              <button 
+                onClick={() => setActiveVideoUrl(null)}
+                className="absolute -top-12 right-0 text-on-surface-variant hover:text-on-surface flex items-center gap-2 font-sans font-semibold text-sm  "
+              >
+                Close Protocol <XCircle className="w-5 h-5" />
+              </button>
+              <iframe 
+                src={activeVideoUrl.replace('watch?v=', 'embed/')} 
+                className="w-full h-full"
+                allowFullScreen
+                title="Exercise Demonstration"
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Schedule Configuration Modal */}
+      <AnimatePresence>
+        {isScheduleConfigModalOpen && pendingProgramId && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsScheduleConfigModalOpen(false)}
+              className="absolute inset-0 bg-[#1c1c1e]est/90 backdrop-blur-xl"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#1c1c1e] border border-primary-container/20 shadow-[0_0_50px_rgba(0,229,255,0.1)] overflow-hidden"
+            >
+              <div className="p-8 border-b border-white/5 flex justify-between items-center">
+                <div>
+                  <span className="font-label text-primary-container text-xs tracking-[0.4em] ">Configuration Matrix</span>
+                  <h2 className="font-sans font-semibold text-2xl font-bold text-on-surface   mt-1">Configure Split</h2>
+                  <p className="text-sm text-on-surface-variant   mt-2 opacity-60">Map your weekly schedule to the program protocols.</p>
+                </div>
+                <button onClick={() => setIsScheduleConfigModalOpen(false)} className="text-on-surface-variant hover:text-on-surface">
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="p-8 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                {DAYS.map(day => {
+                  const program = PROGRAMS.find(p => p.id === pendingProgramId);
+                  const availableDays = program?.dayLabels ? Object.keys(program.dayLabels) : DAYS;
+                  
+                  return (
+                    <div key={day} className="flex items-center justify-between p-4 bg-[#2c2c2e] border border-white/5">
+                      <span className="font-sans font-semibold text-sm font-bold text-on-surface ">{day}</span>
+                      <select 
+                        value={dayMapping[day]}
+                        onChange={(e) => {
+                          const newMapping = { ...dayMapping, [day]: e.target.value };
+                          setDayMapping(newMapping);
+                          localStorage.setItem('sovereign_day_mapping', JSON.stringify(newMapping));
+                        }}
+                        className="bg-[#1c1c1e] rounded-2xl border border-white/5 text-on-surface font-sans font-semibold text-sm   px-4 py-2 focus:outline-none focus:border-primary-container/50"
+                      >
+                        {availableDays.map(labelKey => (
+                          <option key={labelKey} value={labelKey}>
+                            {program?.dayLabels?.[labelKey] || labelKey}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="p-8 border-t border-white/5 flex justify-end">
+                <button 
+                  onClick={() => {
+                    const program = PROGRAMS.find(p => p.id === pendingProgramId);
+                    if (program?.weakpointOptions) {
+                      setIsScheduleConfigModalOpen(false);
+                      setIsWeakpointModalOpen(true);
+                      setSelectedProgramId(pendingProgramId);
+                    } else {
+                      applyProgram(pendingProgramId!, null);
+                      setIsScheduleConfigModalOpen(false);
+                    }
+                  }}
+                  className="px-8 py-4 bg-primary-container text-on-primary-container font-sans font-semibold text-xs font-bold   hover:bg-primary-container/90 transition-all flex items-center gap-2"
+                >
+                  Confirm Configuration <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Weakpoint Selection Modal */}
+      <AnimatePresence>
+        {isWeakpointModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsWeakpointModalOpen(false)}
+              className="absolute inset-0 bg-[#1c1c1e]est/90 backdrop-blur-xl"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg bg-[#1c1c1e] border border-primary-container/20 shadow-[0_0_50px_rgba(0,229,255,0.1)] overflow-hidden"
+            >
+              <div className="p-8 border-b border-white/5">
+                <span className="font-label text-primary-container text-xs tracking-[0.4em] ">Optimization Protocol</span>
+                <h2 className="font-sans font-semibold text-2xl font-bold text-on-surface   mt-1">Select Weakpoint Focus</h2>
+                <p className="text-sm text-on-surface-variant   mt-2 opacity-60">The protocol will adjust volume to prioritize this sector.</p>
+              </div>
+              <div className="p-8 grid grid-cols-1 gap-4">
+                {PROGRAMS.find(p => p.id === selectedProgramId)?.weakpointOptions?.map(option => (
+                  <button 
+                    key={option}
+                    onClick={() => {
+                      if (selectedProgramId) {
+                        applyProgram(selectedProgramId, option);
+                        setIsWeakpointModalOpen(false);
+                      }
+                    }}
+                    className="w-full p-4 bg-[#2c2c2e] border border-white/5 hover:border-primary-container/30 text-left group transition-all"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-sans font-semibold text-sm font-bold text-on-surface  group-hover:text-primary-container transition-colors">{option} Focus</span>
+                      <div className="w-2 h-2 rounded-full border border-primary-container/30 group-hover:bg-primary-container transition-all" />
+                    </div>
+                  </button>
+                ))}
+                <button 
+                  onClick={() => {
+                    if (selectedProgramId) {
+                      applyProgram(selectedProgramId, null);
+                      setIsWeakpointModalOpen(false);
+                    }
+                  }}
+                  className="w-full p-4 border border-dashed border-white/5 text-center font-sans font-semibold text-sm   text-on-surface-variant hover:bg-[#2c2c2e] transition-all"
+                >
+                  No Specific Focus
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Mobile Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-low/90 backdrop-blur-lg border-t border-primary-container/10 flex justify-around p-4 z-50">
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-[#1c1c1e]/90 backdrop-blur-lg border-t border-primary-container/10 flex justify-around p-4 z-50">
         {[
           { icon: Bolt, label: 'Quest', tab: 'Daily Quest' },
           { icon: History, label: 'Archive', tab: 'Workout Archive' },
           { icon: CalendarIcon, label: 'Schedule', tab: 'Schedule' },
           { icon: Utensils, label: 'Fuel', tab: 'Nutrition' },
           { icon: BarChart3, label: 'Stats', tab: 'User Stats' },
+          { icon: Youtube, label: 'Videos', tab: 'Video Library' },
         ].map((item) => (
           <button 
             key={item.label} 
@@ -3328,7 +4102,7 @@ function App() {
             className={`flex flex-col items-center transition-all ${activeTab === item.tab ? 'text-primary-container scale-110' : 'text-on-surface-variant/50'}`}
           >
             <item.icon className={`w-5 h-5 ${activeTab === item.tab ? 'glow-primary' : ''}`} />
-            <span className="text-[7px] uppercase tracking-[0.2em] mt-1 font-headline font-bold">{item.label}</span>
+            <span className="text-[7px]   mt-1 font-sans font-semibold font-bold">{item.label}</span>
           </button>
         ))}
       </div>
