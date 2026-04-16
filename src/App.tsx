@@ -313,6 +313,9 @@ function App() {
     return localStorage.getItem('sovereign_custom_schedule_start_date') || format(new Date(), 'yyyy-MM-dd');
   });
   const [isRoadmapOpen, setIsRoadmapOpen] = useState(false);
+  const [isRpeOpen, setIsRpeOpen] = useState(false);
+  const [isPhaseOpen, setIsPhaseOpen] = useState(false);
+  const [isCardioOpen, setIsCardioOpen] = useState(false);
   const [isProtocolDropdownOpen, setIsProtocolDropdownOpen] = useState(false);
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [nutritionStartDate, setNutritionStartDate] = useState<string>(() => {
@@ -663,9 +666,7 @@ function App() {
     localStorage.setItem('sovereign_theme', theme);
   }, [theme]);
   const [timeLeftInDay, setTimeLeftInDay] = useState('');
-  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [scheduleMonth, setScheduleMonth] = useState(new Date());
-  const [selectedArchiveDate, setSelectedArchiveDate] = useState<Date | null>(null);
   const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [isRestDayModalOpen, setIsRestDayModalOpen] = useState(false);
@@ -1593,15 +1594,12 @@ function App() {
   };
 
   const stats = useMemo(() => {
-    const selectedDateStr = selectedArchiveDate ? format(selectedArchiveDate, 'yyyy-MM-dd') : null;
-    const filteredArchive = selectedDateStr 
-      ? archive.filter(e => e.date === selectedDateStr)
-      : archive;
+    const filteredArchive = archive;
 
     if (filteredArchive.length === 0) {
       return [
-        { label: selectedDateStr ? 'Daily Completion' : 'Protocol Completion', value: '0%', icon: Activity, color: 'text-primary-container' },
-        { label: selectedDateStr ? 'Daily Volume' : 'Total Volume', value: '0 KG', icon: Zap, color: 'text-primary-container' },
+        { label: 'Protocol Completion', value: '0%', icon: Activity, color: 'text-primary-container' },
+        { label: 'Total Volume', value: '0 KG', icon: Zap, color: 'text-primary-container' },
         { label: 'Active Streak', value: `${calculateStreak()} DAYS`, icon: Shield, color: 'text-primary-container' },
         { label: 'Rank Status', value: currentRank.name, icon: Target, color: 'text-primary-container' },
       ];
@@ -1630,12 +1628,12 @@ function App() {
     const rankStatus = currentRank.name;
 
     return [
-      { label: selectedDateStr ? 'Daily Completion' : 'Protocol Completion', value: `${avgCompletion}%`, icon: Activity, color: 'text-primary-container' },
-      { label: selectedDateStr ? 'Daily Volume' : 'Total Volume', value: `${totalVolume.toLocaleString()} KG`, icon: Zap, color: 'text-primary-container', numericValue: totalVolume },
+      { label: 'Protocol Completion', value: `${avgCompletion}%`, icon: Activity, color: 'text-primary-container' },
+      { label: 'Total Volume', value: `${totalVolume.toLocaleString()} KG`, icon: Zap, color: 'text-primary-container', numericValue: totalVolume },
       { label: 'Active Streak', value: `${calculateStreak()} DAYS`, icon: Shield, color: 'text-primary-container' },
       { label: 'Rank Status', value: rankStatus, icon: Target, color: 'text-primary-container' },
     ];
-  }, [archive, currentRank, selectedArchiveDate]);
+  }, [archive, currentRank]);
 
   return (
     <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container relative overflow-x-hidden">
@@ -1653,7 +1651,7 @@ function App() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden md:flex space-x-8 font-sans font-semibold  text-sm ">
-            {['Daily Quest', 'Workout Archive', 'Schedule', 'Nutrition'].map((tab) => (
+            {['Daily Quest', 'Schedule', 'Nutrition'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1721,7 +1719,6 @@ function App() {
             <div className="space-y-2 flex-grow">
               {[
                 { name: 'Daily Quest', icon: Bolt },
-                { name: 'Workout Archive', icon: History },
                 { name: 'Schedule', icon: CalendarIcon },
                 { name: 'Nutrition', icon: Utensils },
                 { name: 'Video Library', icon: Youtube },
@@ -1792,98 +1789,54 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-8">
-                  {/* Cardio Section */}
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-sans font-semibold text-base md:text-lg font-bold text-primary-container flex items-center gap-2 md:gap-3">
-                        <Activity className="w-4 h-4 md:w-5 md:h-5" />
-                        Cardio Protocol
-                      </h3>
+                  {/* Daily Objectives Info Box */}
+                  <div className="bg-primary-container/5 border border-primary-container/20 p-6 relative overflow-hidden group flame-purple mb-6">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
+                      <Activity className="w-16 h-16 text-primary-container" />
                     </div>
-
-                      <div 
-                        className={`group flex flex-col transition-all rounded-2xl mb-4 ${
-                          cardioCompleted 
-                            ? 'bg-primary-container/10 border border-primary-container shadow-[0_0_15px_rgba(0,229,255,0.1)]' 
-                            : 'bg-surface-container-low hover:bg-surface-container-high border border-white/5'
-                        }`}
-                      >
-                        <div 
-                          className="p-4 flex items-center justify-between cursor-pointer"
-                          onClick={() => setExpandedExercises(prev => prev.includes('cardio') ? prev.filter(e => e !== 'cardio') : [...prev, 'cardio'])}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`p-2 md:p-3 rounded-full transition-colors ${cardioCompleted ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-highest text-on-surface-variant'}`}>
-                              <Activity className="w-5 h-5 md:w-6 md:h-6" />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <div className={`font-sans font-semibold font-bold text-sm md:text-base ${cardioCompleted ? 'text-primary-container line-through' : 'text-on-surface'}`}>
-                                Treadmill Protocol
-                              </div>
-                              <div className="font-label text-xs text-on-surface-variant tracking-[0.1em]">
-                                30-45 Min LISS / HIIT
-                              </div>
-                            </div>
+                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                      
+                      <div className="flex flex-col">
+                        <div className="font-label text-xs text-primary-container tracking-[0.3em] mb-1">Daily Quest</div>
+                        <h3 className="font-sans font-semibold text-2xl font-bold text-on-surface flex items-center gap-3">
+                          <Bolt className="w-6 h-6 text-primary-container" />
+                          Today's Workout
+                        </h3>
+                        {selectedProgramId && PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[getProgramCurrentDay()] && (
+                          <div className="mt-1 font-label text-sm text-on-surface-variant opacity-70">
+                            {PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[getProgramCurrentDay()]}
                           </div>
-                          
-                          <div className="flex items-center gap-3">
-                            <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                if (!isTimerActive) setIsTimerActive(true);
-                                setCardioCompleted(!cardioCompleted); 
-                              }}
-                              className={`flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-xl transition-all ${
-                                cardioCompleted 
-                                  ? 'bg-primary-container text-on-primary-container shadow-[0_0_15px_rgba(0,229,255,0.4)]' 
-                                  : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20'
-                              }`}
-                            >
-                              {cardioCompleted ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : <Check className="w-4 h-4 md:w-5 md:h-5 text-primary-container" />}
-                            </button>
-                            <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${expandedExercises.includes('cardio') ? 'rotate-180' : ''}`} />
-                          </div>
-                        </div>
-
-                        <AnimatePresence>
-                          {expandedExercises.includes('cardio') && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="p-4 pt-0 border-t border-white/5 mt-2">
-                                <div className="mb-3 p-2 bg-primary-container/10 border-l-2 border-primary-container text-xs text-on-surface leading-relaxed">
-                                  <span className="text-primary-container font-bold mr-1">NOTES:</span> Keep heart rate in Zone 2 for LISS, or alternate 1 min sprint / 1 min walk for HIIT.
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                        )}
                       </div>
-                  </div>
-
-                      <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-col">
-                            <h3 className="font-sans font-semibold text-base md:text-lg font-bold   text-primary-container flex items-center gap-2 md:gap-3">
-                              <Bolt className="w-4 h-4 md:w-5 md:h-5" />
-                              Today's Workout
-                            </h3>
-                            {selectedProgramId && PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[getProgramCurrentDay()] && (
-                              <div className="mt-1 font-label text-sm text-primary-container/80 font-bold  ">
-                                {PROGRAMS.find(p => p.id === selectedProgramId)?.dayLabels?.[getProgramCurrentDay()]}
-                              </div>
-                            )}
-                            <div className="mt-3 text-xs text-on-surface-variant bg-surface-container-low p-3 rounded-xl border border-white/5 max-w-md">
-                              <span className="font-bold text-primary-container">RPE (Rate of Perceived Exertion):</span> 10 = Absolute failure (0 reps left), 9 = 1 rep left in tank, 8 = 2 reps left.
-                            </div>
+                      
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end text-right">
+                          <div className={`font-sans font-semibold text-sm ${cardioCompleted ? 'text-primary-container line-through' : 'text-on-surface'}`}>
+                            Treadmill Protocol
                           </div>
-                          <div className="font-label text-xs md:text-sm text-on-surface-variant bg-surface-container-high px-3 py-1.5 rounded-lg">
-                            Phase: Hypertrophy
+                          <div className="font-label text-[10px] text-on-surface-variant tracking-[0.1em]">
+                            30-45 Min LISS / HIIT
                           </div>
                         </div>
+                        
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (!isTimerActive) setIsTimerActive(true);
+                            setCardioCompleted(!cardioCompleted); 
+                          }}
+                          className={`rounded-xl border px-4 py-2 font-sans font-semibold text-xs font-bold transition-all ${
+                            cardioCompleted 
+                              ? 'bg-primary-container/20 text-primary-container border-primary-container/50' 
+                              : 'bg-surface-container-high text-on-surface border-white/5 hover:bg-primary-container/10'
+                          }`}
+                        >
+                          {cardioCompleted ? 'Completed' : 'Mark Done'}
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
 
                         {workout.length > 0 && (
                           <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
@@ -1893,7 +1846,6 @@ function App() {
                             />
                           </div>
                         )}
-                      </div>
 
                       <div className="space-y-3 md:space-y-4">
                         <AnimatePresence mode="popLayout">
@@ -2207,6 +2159,19 @@ function App() {
                               isRestDay = exercises.length === 0;
                             }
 
+                            const dateStr = format(day, 'yyyy-MM-dd');
+                            const dayEntries = archive.filter(e => e.date === dateStr);
+                            const hasCompletedWorkout = dayEntries.some(e => e.type === 'COMPLETED');
+                            const hasIncompleteWorkout = dayEntries.some(e => e.type === 'INCOMPLETE' || e.type === 'BREACH');
+                            const isPastDay = day < new Date(new Date().setHours(0, 0, 0, 0));
+                            
+                            let dotColorClass = "bg-primary-container shadow-[0_0_5px_rgba(0,229,255,0.5)]"; // default
+                            if (hasCompletedWorkout) {
+                              dotColorClass = "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]";
+                            } else if (hasIncompleteWorkout || isPastDay) {
+                              dotColorClass = "bg-error shadow-[0_0_5px_rgba(255,68,68,0.5)]";
+                            }
+
                             return (
                               <button
                                 key={i}
@@ -2231,7 +2196,7 @@ function App() {
                                     {isRestDay ? (
                                       <CloudOff className="w-3 h-3 md:w-5 md:h-5 text-on-surface-variant/30" />
                                     ) : (
-                                      <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-primary-container shadow-[0_0_5px_rgba(0,229,255,0.5)]" />
+                                      <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${dotColorClass}`} />
                                     )}
                                   </div>
                                 )}
@@ -2288,14 +2253,30 @@ function App() {
                               }
                               const mappedDay = dayMapping[dayName] || dayName;
                               const exercises = weekData?.days[mappedDay] || [];
-                              const isRestDay = exercises.length === 0;
+                              const dateStr = format(selectedScheduleDate, 'yyyy-MM-dd');
+                              const loggedEntries = archive.filter(e => e.date === dateStr);
+                              const loggedExercises = loggedEntries.flatMap(e => e.exercises || []);
+                              const isLogged = loggedExercises.length > 0;
+                              const displayExercises = isLogged ? loggedExercises : exercises;
+                              
+                              const isRestDay = displayExercises.length === 0 && !isLogged;
                               const dayLabel = program?.dayLabels?.[mappedDay];
 
                               return (
                                 <div className="space-y-4">
                                   <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                                    <div className="font-label text-xs text-on-surface-variant">
+                                    <div className="font-label text-xs text-on-surface-variant flex items-center gap-2">
                                       Week {weekNum} • {dayName}
+                                      {isLogged && (
+                                        <span className="bg-primary-container/20 text-primary-container px-2 py-0.5 rounded text-[10px] font-bold">
+                                          LOGGED
+                                        </span>
+                                      )}
+                                      {!isLogged && !isRestDay && (
+                                        <span className="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-bold">
+                                          PLANNED
+                                        </span>
+                                      )}
                                     </div>
                                     {dayLabel && (
                                       <div className="font-label text-[10px] text-primary-container/80 font-bold border border-primary-container/20 px-1.5 py-0.5">
@@ -2311,13 +2292,62 @@ function App() {
                                     </div>
                                   ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                      {exercises.map((ex: any, exIdx: number) => (
-                                        <div key={exIdx} className="bg-surface-container-high rounded-xl p-3 border border-white/5">
-                                          <div className="font-sans font-semibold text-sm text-on-surface">{ex.name}</div>
-                                          <div className="flex justify-between items-center mt-2">
-                                            <span className="font-label text-[10px] text-on-surface-variant">{ex.target}</span>
-                                            <span className="font-mono text-xs text-primary-container">{ex.sets}x{ex.reps}</span>
+                                      {displayExercises.map((ex: any, exIdx: number) => (
+                                        <div key={exIdx} className={`bg-surface-container-high rounded-xl p-3 border ${ex.completed ? 'border-emerald-500/30' : 'border-white/5'}`}>
+                                          <div className="font-sans font-semibold text-sm text-on-surface flex justify-between">
+                                            {ex.name}
+                                            {ex.completed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                                           </div>
+                                          <div className="flex justify-between items-center mt-2 mb-2">
+                                            <span className="font-label text-[10px] text-on-surface-variant">{ex.target || 'N/A'}</span>
+                                            <span className="font-mono text-xs text-primary-container">
+                                              {ex.sets} Sets
+                                            </span>
+                                          </div>
+                                          
+                                          {ex.setData ? (
+                                            <div className="grid grid-cols-1 gap-2 pt-2 border-t border-outline-variant/5">
+                                              {ex.setData.map((s: any, idx: number) => (
+                                                <div key={idx} className="flex items-center justify-between p-2 bg-surface-container-highest/20 border border-white/5 rounded">
+                                                  <div className="flex items-center gap-2">
+                                                    <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
+                                                      <span className="font-sans font-semibold text-xs font-bold text-primary-container">{idx + 1}</span>
+                                                    </div>
+                                                    <span className="font-label text-xs text-on-surface-variant">Set</span>
+                                                  </div>
+                                                  <div className="flex gap-3">
+                                                    <div className="text-right">
+                                                      <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Weight</div>
+                                                      <div className="font-mono text-sm text-on-surface leading-none">{s.weight}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                      <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Reps</div>
+                                                      <div className="font-mono text-sm text-on-surface leading-none">{s.reps}</div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <div className="flex justify-between items-center p-2 bg-surface-container-highest/20 border border-white/5 rounded pt-2 mt-2">
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
+                                                  <span className="font-sans font-semibold text-xs font-bold text-primary-container">1</span>
+                                                </div>
+                                                <span className="font-label text-xs text-on-surface-variant">Standard Protocol</span>
+                                              </div>
+                                              <div className="flex gap-3">
+                                                <div className="text-right">
+                                                  <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Weight</div>
+                                                  <div className="font-mono text-sm text-on-surface leading-none">{ex.weight || '-'}</div>
+                                                </div>
+                                                <div className="text-right">
+                                                  <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Reps</div>
+                                                  <div className="font-mono text-sm text-on-surface leading-none">{ex.reps || '-'}</div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
                                       ))}
                                     </div>
@@ -2338,267 +2368,6 @@ function App() {
                   <div className="text-sm mt-2">Select a protocol from the dropdown to view the schedule.</div>
                 </div>
               )}
-            </motion.div>
-          )}
-          {activeTab === 'Workout Archive' && (
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-8"
-            >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 gap-6">
-                <div>
-                  <span className="font-label text-primary-container text-sm tracking-[0.4em] ">Historical Data</span>
-                  <h1 className="font-sans font-semibold text-3xl md:text-5xl font-bold text-on-surface   mt-2">Protocol Archive</h1>
-                </div>
-                <div className="flex gap-4 w-full md:w-auto">
-                  {archive.length > 0 && (
-                    <button 
-                      onClick={() => setShowPurgeModal(true)}
-                      className="w-full md:w-auto font-sans font-semibold text-sm font-bold rounded-xl text-error hover:text-error/80 transition-colors border border-error/20 px-4 py-2 bg-error/5 hover:bg-error/10"
-                    >
-                      Purge Archive Data
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Calendar Grid */}
-                <div className="lg:col-span-2 bg-surface-container-low p-4 md:p-6 border border-white/5">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 md:mb-8 gap-3 md:gap-4">
-                    <h3 className="font-sans font-semibold text-sm md:text-lg font-bold   text-primary-container flex items-center gap-2 md:gap-3">
-                      <History className="w-4 h-4 md:w-5 md:h-5" />
-                      Daily Quest History
-                    </h3>
-                    <div className="flex flex-wrap gap-2 md:gap-4 items-center w-full md:w-auto justify-between">
-                      <div className="font-label text-xs md:text-sm text-on-surface-variant  ">
-                        {format(currentMonth, 'MMMM yyyy')}
-                      </div>
-                      <div className="flex gap-1 md:gap-2">
-                        <button 
-                          onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                          className="p-1.5 md:p-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-white/5"
-                        >
-                          <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
-                        </button>
-                        <button 
-                          onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                          className="p-1.5 md:p-2 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-white/5"
-                        >
-                          <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-7 gap-px bg-outline-variant/10 border border-white/5">
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, idx) => (
-                      <div key={idx} className="bg-surface-container-low rounded-2xl p-1 md:p-2 text-center font-label text-xs text-on-surface-variant   border-b border-white/5">
-                        {d}
-                      </div>
-                    ))}
-                    {(() => {
-                      const monthStart = startOfMonth(currentMonth);
-                      const monthEnd = endOfMonth(monthStart);
-                      const startDate = startOfWeek(monthStart);
-                      const endDate = endOfWeek(monthEnd);
-                      const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
-
-                      return calendarDays.map((day, i) => {
-                        const dateStr = format(day, 'yyyy-MM-dd');
-                        const dayEntries = archive.filter(e => e.date === dateStr);
-                        const { isDeloadWeek, weekInCycle, isActiveProgram } = getDeloadStatus(day);
-                        const isSelected = selectedArchiveDate && isSameDay(day, selectedArchiveDate);
-                        const isCurrentMonth = isSameMonth(day, monthStart);
-
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => setSelectedArchiveDate(day)}
-                            className={`relative h-14 md:h-24 p-1 md:p-2 transition-all hover:z-10 ${
-                              isCurrentMonth ? 'bg-surface-container-low' : 'bg-surface-container-low/30 opacity-30'
-                            } ${isSelected ? 'ring-2 ring-primary-container ring-inset z-10' : ''} ${
-                              isDeloadWeek ? 'bg-emerald-500/5' : ''
-                            } border-r border-b border-white/5 overflow-hidden`}
-                          >
-                            {/* Program/Deload Line */}
-                            {isActiveProgram && isCurrentMonth && (
-                              <div className={`absolute bottom-0 left-0 right-0 h-1 md:h-1.5 ${isDeloadWeek ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.4)]'}`} />
-                            )}
-
-                            <div className="flex justify-between items-start">
-                              <span className={`font-mono text-xs md:text-sm ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
-                                {format(day, 'd')}
-                              </span>
-                              {isDeloadEnabled && isCurrentMonth && (
-                                <span className={`text-[6px]   ${isDeloadWeek ? 'text-emerald-500 font-bold' : 'text-on-surface-variant/40'}`}>
-                                  {isDeloadWeek ? 'DELOAD' : `W${weekInCycle}`}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="mt-1 md:mt-2 flex flex-wrap gap-0.5 md:gap-1 justify-center">
-                              {dayEntries.map(entry => (
-                                <div key={entry.id} className="flex items-center justify-center">
-                                  {entry.type === 'COMPLETED' ? (
-                                    <CheckCircle2 className="w-2 h-2 md:w-4 md:h-4 text-primary-container" />
-                                  ) : entry.type === 'INCOMPLETE' ? (
-                                    <AlertTriangle className="w-2 h-2 md:w-4 md:h-4 text-amber-500" />
-                                  ) : entry.type === 'BREACH' ? (
-                                    <XCircle className="w-2 h-2 md:w-4 md:h-4 text-error shadow-[0_0_10px_rgba(255,68,68,0.4)]" />
-                                  ) : (
-                                    <XCircle className="w-2 h-2 md:w-4 md:h-4 text-error" />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </button>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-
-                {/* Day Details */}
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-surface-container-low rounded-2xl p-4 md:p-6 border border-white/5 h-full">
-                    <h4 className="font-sans font-semibold text-sm font-bold  tracking-[0.3em] text-on-surface-variant mb-6">
-                      {selectedArchiveDate ? format(selectedArchiveDate, 'EEEE, MMMM do') : 'Select a date to view intel'}
-                    </h4>
-
-                    {!selectedArchiveDate ? (
-                      <div className="flex flex-col items-center justify-center h-64 text-on-surface-variant/20">
-                        <Terminal className="w-12 h-12 mb-4" />
-                        <div className="font-sans font-semibold text-xs  ">Awaiting Selection</div>
-                      </div>
-                    ) : (
-                      <div className="space-y-6">
-                        {archive.filter(e => e.date === format(selectedArchiveDate, 'yyyy-MM-dd')).length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/5 space-y-4">
-                            <div className="text-on-surface-variant/30 font-sans font-semibold text-sm   text-center">
-                              No protocol data for this cycle
-                            </div>
-                            <button 
-                              onClick={() => createManualArchiveEntry(selectedArchiveDate)}
-                              className="flex items-center gap-2 bg-primary-container/10 border border-primary-container/30 px-4 py-2 text-xs font-bold text-primary-container   hover:bg-primary-container/20 transition-all"
-                            >
-                              <Rocket className="w-3 h-3" />
-                              Initialize Manual Entry
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            {archive.filter(e => e.date === format(selectedArchiveDate, 'yyyy-MM-dd')).map(entry => (
-                            <div key={entry.id} className="space-y-4">
-                              <div className={`p-4 border-l-2 ${
-                                entry.type === 'COMPLETED' ? 'bg-primary-container/5 border-primary-container' : 
-                                entry.type === 'INCOMPLETE' ? 'bg-amber-500/5 border-amber-500' : 
-                                entry.type === 'BREACH' ? 'bg-error/10 border-error shadow-[inset_0_0_20px_rgba(255,68,68,0.1)]' : 'bg-error/5 border-error'
-                              }`}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-3">
-                                    {entry.type === 'COMPLETED' ? <CheckCircle2 className="w-4 h-4 text-primary-container" /> : 
-                                     entry.type === 'INCOMPLETE' ? <AlertTriangle className="w-4 h-4 text-amber-500" /> :
-                                     entry.type === 'BREACH' ? <XCircle className="w-4 h-4 text-error animate-pulse" /> :
-                                     <XCircle className="w-4 h-4 text-error" />}
-                                    <span className={`font-sans font-semibold text-sm font-bold   ${entry.type === 'BREACH' ? 'text-error' : ''}`}>{entry.details}</span>
-                                  </div>
-                                  <button 
-                                    onClick={() => handleEditArchive(entry)}
-                                    className="p-1.5 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant border border-white/5 transition-all"
-                                  >
-                                    <Settings className="w-3 h-3" />
-                                  </button>
-                                </div>
-                                <div className="font-label text-xs text-on-surface-variant   flex items-center gap-3">
-                                  <span>Status: {entry.type} {entry.progress !== undefined && `(${entry.progress}%)`}</span>
-                                  {entry.duration !== undefined && (
-                                    <span className="flex items-center gap-1">
-                                      <Clock className="w-2 h-2" />
-                                      {formatTime(entry.duration)}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {entry.exercises && (
-                                <div className="space-y-2">
-                                  <div className="font-label text-xs text-on-surface-variant   border-b border-white/5 pb-1">Exercise Intel</div>
-                                  {entry.exercises.map(ex => (
-                                    <div key={ex.id} className="bg-surface-container-high rounded-2xl p-3 space-y-2 border border-white/5">
-                                      <div className="flex justify-between items-center">
-                                        <div>
-                                          <div className="font-sans font-semibold font-bold   text-sm">{ex.name}</div>
-                                          <div className="font-label text-xs text-on-surface-variant ">{ex.target}</div>
-                                        </div>
-                                        <div className="text-right">
-                                          <div className="font-label text-xs text-on-surface-variant ">{ex.sets} Sets</div>
-                                        </div>
-                                      </div>
-                                      {ex.setData ? (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-outline-variant/5">
-                                          {ex.setData.map((s, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-2 bg-surface-container-highest/20 border border-white/5 rounded">
-                                              <div className="flex items-center gap-2">
-                                                <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
-                                                  <span className="font-sans font-semibold text-xs font-bold text-primary-container">{idx + 1}</span>
-                                                </div>
-                                                <span className="font-label text-xs text-on-surface-variant  ">Set</span>
-                                              </div>
-                                              <div className="flex gap-3">
-                                                <div className="text-right">
-                                                  <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Weight</div>
-                                                  <div className="font-mono text-sm text-on-surface leading-none">{s.weight}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                  <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Reps</div>
-                                                  <div className="font-mono text-sm text-on-surface leading-none">{s.reps}</div>
-                                                </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <div className="flex justify-between items-center p-2 bg-surface-container-highest/20 border border-white/5 rounded pt-2 mt-2">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
-                                              <span className="font-sans font-semibold text-xs font-bold text-primary-container">1</span>
-                                            </div>
-                                            <span className="font-label text-xs text-on-surface-variant  ">Standard Protocol</span>
-                                          </div>
-                                          <div className="flex gap-3">
-                                            <div className="text-right">
-                                              <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Weight</div>
-                                              <div className="font-mono text-sm text-on-surface leading-none">{ex.weight}</div>
-                                            </div>
-                                            <div className="text-right">
-                                              <div className="text-[6px] text-on-surface-variant/50  leading-none mb-0.5">Reps</div>
-                                              <div className="font-mono text-sm text-on-surface leading-none">{ex.reps}</div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                            <button 
-                              onClick={() => createManualArchiveEntry(selectedArchiveDate)}
-                              className="w-full py-3 border border-dashed border-white/5 text-xs   text-on-surface-variant hover:bg-surface-container-highest/20 transition-all flex items-center justify-center gap-2"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Add Another Session
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
             </motion.div>
           )}
           {activeTab === 'Nutrition' && (
@@ -3585,7 +3354,6 @@ function App() {
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-surface-container-low/90 backdrop-blur-lg border-t border-primary-container/10 flex justify-around p-4 z-50">
         {[
           { icon: Bolt, label: 'Quest', tab: 'Daily Quest' },
-          { icon: History, label: 'Archive', tab: 'Workout Archive' },
           { icon: CalendarIcon, label: 'Schedule', tab: 'Schedule' },
           { icon: Utensils, label: 'Fuel', tab: 'Nutrition' },
           { icon: Youtube, label: 'Videos', tab: 'Video Library' },

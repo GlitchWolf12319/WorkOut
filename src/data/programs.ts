@@ -36,25 +36,25 @@ export const PROGRAMS: Program[] = [
     id: 'nippard-pure-bb-ppl',
     name: 'Pure Bodybuilding PPL',
     author: 'Jeff Nippard',
-    description: 'A 6-day Push/Pull/Legs split designed for maximum hypertrophy. (10 Weeks)',
+    description: 'A 10-day Push/Pull/Legs split designed for maximum hypertrophy. (10 Weeks)',
     totalWeeks: 10,
     dayLabels: {
-      'Day 1': 'PULL #1 (LAT FOCUSED)',
-      'Day 2': 'PUSH #1',
-      'Day 3': 'LEGS #1',
-      'Day 4': 'REST',
-      'Day 5': 'ARMS & WEAK POINTS #1',
-      'Day 6': 'REST',
-      'Day 7': 'PULL #2 (MID-BACK FOCUSED)',
-      'Day 8': 'PUSH #2',
-      'Day 9': 'LEGS #2',
+      'Day 1': 'Pull #1',
+      'Day 2': 'Push #1',
+      'Day 3': 'Legs #1',
+      'Day 4': 'Weak Point Day #1',
+      'Day 5': 'REST',
+      'Day 6': 'Pull #2',
+      'Day 7': 'Push #2',
+      'Day 8': 'Legs #2',
+      'Day 9': 'Weak Point Day #2',
       'Day 10': 'REST'
     },
-    optionalRestDays: ['Day 4', 'Day 6', 'Day 10'],
+    optionalRestDays: ['Day 5', 'Day 10'],
     weakpointOptions: ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs'],
     weakpointAdditions: {
       'Chest': {
-        'Day 5': [
+        'Day 4': [
           { name: 'Pec Deck Fly', target: 'Chest', weight: 'RPE 9', reps: '12-15', sets: '2', notes: 'Focus on the stretch and squeeze.' }
         ]
       },
@@ -75,7 +75,7 @@ export const PROGRAMS: Program[] = [
         ]
       },
       'Legs': {
-        'Day 7': [
+        'Day 6': [
           { name: 'Leg Extension', target: 'Quads', weight: 'RPE 9', reps: '15-20', sets: '2', notes: 'Burnout.' }
         ]
       }
@@ -339,7 +339,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -438,7 +438,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -527,7 +528,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -616,7 +617,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -706,7 +707,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -794,7 +795,8 @@ export const PROGRAMS: Program[] = [
                 "Plate-Weighted Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "2": {
@@ -1055,7 +1057,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -1154,7 +1156,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -1243,7 +1246,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -1332,7 +1335,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -1422,7 +1425,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -1510,7 +1513,8 @@ export const PROGRAMS: Program[] = [
                 "Plate-Weighted Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "3": {
@@ -1771,7 +1775,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -1870,7 +1874,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -1959,7 +1964,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -2048,7 +2053,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -2138,7 +2143,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -2226,7 +2231,8 @@ export const PROGRAMS: Program[] = [
                 "Plate-Weighted Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "4": {
@@ -2487,7 +2493,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -2586,7 +2592,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -2675,7 +2682,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -2764,7 +2771,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -2854,7 +2861,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -2942,7 +2949,8 @@ export const PROGRAMS: Program[] = [
                 "Plate-Weighted Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "5": {
@@ -3203,7 +3211,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -3302,7 +3310,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -3391,7 +3400,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -3480,7 +3489,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -3570,7 +3579,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -3658,7 +3667,8 @@ export const PROGRAMS: Program[] = [
                 "Plate-Weighted Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "6": {
@@ -3918,7 +3928,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4017,7 +4027,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4094,7 +4105,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4183,7 +4194,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4273,7 +4284,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -4348,7 +4359,8 @@ export const PROGRAMS: Program[] = [
                 "Bicycle Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "7": {
@@ -4608,7 +4620,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4707,7 +4719,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4784,7 +4797,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4873,7 +4886,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -4963,7 +4976,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -5038,7 +5051,8 @@ export const PROGRAMS: Program[] = [
                 "Bicycle Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "8": {
@@ -5298,7 +5312,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -5397,7 +5411,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -5474,7 +5489,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -5563,7 +5578,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -5653,7 +5668,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -5728,7 +5743,8 @@ export const PROGRAMS: Program[] = [
                 "Bicycle Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "9": {
@@ -5988,7 +6004,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6087,7 +6103,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6164,7 +6181,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6253,7 +6270,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6343,7 +6360,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -6418,7 +6435,8 @@ export const PROGRAMS: Program[] = [
                 "Bicycle Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       },
       "10": {
@@ -6678,7 +6696,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5": [
+          "Day 4": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6777,7 +6795,8 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 7": [
+          "Day 5": [],
+          "Day 6": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6854,7 +6873,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 8": [
+          "Day 7": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -6943,7 +6962,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 9": [
+          "Day 8": [
             {
               "name": "General & Specific Warm-Up",
               "target": "Full Body",
@@ -7033,7 +7052,7 @@ export const PROGRAMS: Program[] = [
               ]
             }
           ],
-          "Day 5_alt": [
+          "Day 9": [
             {
               "name": "Weak Point Exercise 1",
               "target": "Weak Point",
@@ -7108,927 +7127,10 @@ export const PROGRAMS: Program[] = [
                 "Bicycle Crunch"
               ]
             }
-          ]
+          ],
+          "Day 10": []
         }
       }
     }
   },
-  {
-    id: 'nippard-pure-bb-p2-updated',
-    name: 'Pure Bodybuilding Phase 2 (Updated)',
-    author: 'Jeff Nippard',
-    description: 'The updated 10-week Phase 2 program focused on aesthetic development and muscle thickness.',
-    totalWeeks: 10,
-    dayLabels: {
-      'Day 1': 'UPPER #1 (CHEST/BACK)',
-      'Day 2': 'LOWER #1 (QUAD FOCUSED)',
-      'Day 3': 'REST',
-      'Day 5': 'UPPER #2 (BACK/CHEST)',
-      'Day 7': 'LOWER #2 (HAM FOCUSED)',
-      'Saturday': 'ARMS & WEAK POINTS',
-      'Sunday': 'REST'
-    },
-    weakpointOptions: ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs'],
-    weakpointAdditions: {
-      'Chest': {
-        'Day 3': [
-          { name: 'Incline DB Press', target: 'Chest', weight: 'RPE 9', reps: '10-12', sets: '2', notes: 'Focus on upper chest.' }
-        ]
-      },
-      'Back': {
-        'Day 1': [
-          { name: 'Meadows Row', target: 'Back', weight: 'RPE 9', reps: '8-10', sets: '2', notes: 'Stretch the lat.' }
-        ]
-      },
-      'Shoulders': {
-        'Day 7': [
-          { name: 'Cable Lateral Raise', target: 'Shoulders', weight: 'RPE 9', reps: '15-20', sets: '2', notes: 'Constant tension.' }
-        ]
-      },
-      'Arms': {
-        'Day 7': [
-          { name: 'Spider Curl', target: 'Biceps', weight: 'RPE 9', reps: '12-15', sets: '2', notes: 'Strict form.' },
-          { name: 'Tricep Pushdown', target: 'Triceps', weight: 'RPE 9', reps: '12-15', sets: '2', notes: 'Squeeze.' }
-        ]
-      },
-      'Legs': {
-        'Day 2': [
-          { name: 'Sissy Squat', target: 'Quads', weight: 'RPE 9', reps: '15-20', sets: '2', notes: 'Deep stretch.' }
-        ]
-      }
-    },
-    weeks: {
-      '1-4': {
-        days: {
-          'Day 1': [
-            { 
-              name: 'Behind The Back Lateral Raise (Cable)', 
-              target: 'Shoulders', 
-              weight: 'RPE 7-9', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Focus on the side delt stretch. Keep the cable behind your body.',
-              substitutions: ['Dumbbell Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Wide Grip Lat Pulldown', 
-              target: 'Back', 
-              weight: 'RPE 8', 
-              reps: '8-10', 
-              sets: '3', 
-              notes: 'Pull to your upper chest. Focus on the stretch at the top.',
-              substitutions: ['Pull-Ups', 'Chin-Ups', 'Neutral Grip Pulldown']
-            },
-            { 
-              name: 'Flat Machine Chest Press', 
-              target: 'Chest', 
-              weight: 'RPE 8', 
-              reps: '8-10', 
-              sets: '3', 
-              notes: 'Control the eccentric. Drive through the palms.',
-              substitutions: ['Barbell Bench Press', 'Dumbbell Bench Press']
-            },
-            { 
-              name: 'Single Arm Iso Row', 
-              target: 'Back', 
-              weight: 'RPE 9', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Pull to your hip. Focus on the lat contraction.',
-              substitutions: ['Dumbbell Row', 'Seated Cable Row']
-            },
-            { 
-              name: 'Chest Fly (Cable)', 
-              target: 'Chest', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Deep stretch at the bottom. Squeeze hard at the center.',
-              substitutions: ['Pec Deck', 'Dumbbell Flyes']
-            },
-            { 
-              name: 'Bayesian Curl', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Focus on the stretch. Keep your elbow slightly behind your body.',
-              substitutions: ['Incline Dumbbell Curl', 'Cable Bicep Curl']
-            }
-          ],
-          'Day 2': [
-            { 
-              name: 'Lying Leg Curl', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 8', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Keep hips pressed into pad. Control the weight.',
-              substitutions: ['Seated Leg Curl', 'Glute Ham Raise']
-            },
-            { 
-              name: 'Squat (Smith Machine)', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 8', 
-              reps: '6-8', 
-              sets: '3', 
-              notes: 'Deep range of motion. Focus on the quads.',
-              substitutions: ['Back Squat', 'Hack Squat', 'Leg Press']
-            },
-            { 
-              name: 'Romanian Deadlift (Dumbbell)', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 8', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Hinge at hips. Focus on the hamstring stretch.',
-              substitutions: ['Barbell RDL', 'Stiff Leg Deadlift']
-            },
-            { 
-              name: 'Leg Extension', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Hold contraction at top. Control the eccentric.',
-              substitutions: ['Sissy Squat', 'Bulgarian Split Squat']
-            },
-            { 
-              name: 'Standing Calf Raise', 
-              target: 'Calves', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '4', 
-              notes: 'Full range of motion. Pause at the bottom.',
-              substitutions: ['Seated Calf Raise', 'Leg Press Calf Raise']
-            },
-            { 
-              name: 'Hip Abductor (Machine)', 
-              target: 'Legs (Glutes)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Controlled reps. Focus on the glute medius.',
-              substitutions: ['Cable Hip Abduction', 'Band Abduction']
-            }
-          ],
-          'Day 3': [
-            { 
-              name: 'Lateral Raise (Cable)', 
-              target: 'Shoulders', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Constant tension. Control the weight.',
-              substitutions: ['Dumbbell Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Bent Over Row (Barbell)', 
-              target: 'Back', 
-              weight: 'RPE 8', 
-              reps: '8-10', 
-              sets: '3', 
-              notes: 'Pull to belly button. Keep your back flat.',
-              substitutions: ['Dumbbell Row', 'Seated Cable Row']
-            },
-            { 
-              name: 'Incline Bench Press (Dumbbell)', 
-              target: 'Chest', 
-              weight: 'RPE 8', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: '30 degree incline. Focus on upper chest.',
-              substitutions: ['Incline Barbell Press', 'Incline Machine Press']
-            },
-            { 
-              name: 'Lat Pulldown (Neutral Grip)', 
-              target: 'Back', 
-              weight: 'RPE 8', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Focus on lats. Pull your elbows down.',
-              substitutions: ['Wide Grip Pulldown', 'Pull-Ups']
-            },
-            { 
-              name: 'Reverse Pec Deck', 
-              target: 'Shoulders (Rear)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Rear delt focus. Do not use momentum.',
-              substitutions: ['Face Pulls', 'Bent Over Lateral Raise']
-            },
-            { 
-              name: 'Overhead Tricep Extension (Cable)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Deep stretch. Keep elbows tucked.',
-              substitutions: ['Skull Crushers', 'Tricep Pushdown']
-            }
-          ],
-          'Day 5': [
-            { 
-              name: 'Romanian Deadlift (Barbell)', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 8', 
-              reps: '6-8', 
-              sets: '3', 
-              notes: 'Neutral spine. Focus on the stretch.',
-              substitutions: ['Dumbbell RDL', 'Stiff Leg Deadlift']
-            },
-            { 
-              name: 'Leg Press', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 8', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Feet low for quads. Control the weight.',
-              substitutions: ['Hack Squat', 'Smith Machine Squat']
-            },
-            { 
-              name: 'Reverse Lunge (Barbell)', 
-              target: 'Legs', 
-              weight: 'RPE 9', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Control the balance. Focus on the working leg.',
-              substitutions: ['Dumbbell Lunge', 'Bulgarian Split Squat']
-            },
-            { 
-              name: 'Hyperextension', 
-              target: 'Back/Hams', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Focus on glutes/hams. Round your upper back slightly for glute focus.',
-              substitutions: ['Glute Ham Raise', 'Good Mornings']
-            },
-            { 
-              name: 'Standing Calf Raise', 
-              target: 'Calves', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '4', 
-              notes: 'Pause at bottom. Full range.',
-              substitutions: ['Seated Calf Raise', 'Leg Press Calf Raise']
-            },
-            { 
-              name: 'Hip Abductor (Machine)', 
-              target: 'Legs (Glutes)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Controlled reps.',
-              substitutions: ['Cable Hip Abduction', 'Band Abduction']
-            }
-          ],
-          'Day 7': [
-            { 
-              name: 'Shrug (Band)', 
-              target: 'Back (Traps)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Hold squeeze at top. Do not roll shoulders.',
-              substitutions: ['Barbell Shrug', 'Dumbbell Shrug']
-            },
-            { 
-              name: 'Wrist Curls', 
-              target: 'Arms (Forearms)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Full range. Control the weight.',
-              substitutions: ['Reverse Wrist Curls', 'Hammer Curls']
-            },
-            { 
-              name: 'Bicep Curl (Cable)', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 9', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'No swinging. Squeeze at the top.',
-              substitutions: ['Dumbbell Curl', 'Barbell Curl']
-            },
-            { 
-              name: 'Skull Crusher (Barbell)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 8', 
-              reps: '10-12', 
-              sets: '3', 
-              notes: 'Keep elbows in. Lower to forehead.',
-              substitutions: ['Tricep Pushdown', 'Overhead Extension']
-            },
-            { 
-              name: 'Incline Curl (Dumbbell)', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Stretch long head. Keep elbows back.',
-              substitutions: ['Bayesian Curl', 'Preacher Curl']
-            },
-            { 
-              name: 'Tricep Extension (Cable)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 9', 
-              reps: '12-15', 
-              sets: '3', 
-              notes: 'Squeeze at bottom. Control the eccentric.',
-              substitutions: ['Skull Crushers', 'Overhead Extension']
-            },
-            { 
-              name: 'Leg Raise (Captain\'s Chair)', 
-              target: 'Abs', 
-              weight: 'Bodyweight', 
-              reps: 'Failure', 
-              sets: '3', 
-              notes: 'Control the swing. Focus on lower abs.',
-              substitutions: ['Hanging Leg Raise', 'Crunches']
-            }
-          ]
-        }
-      },
-      '5-8': {
-        days: {
-          'Day 1': [
-            { 
-              name: 'Behind The Back Lateral Raise (Cable)', 
-              target: 'Shoulders', 
-              weight: 'RPE 8-9', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Intensity increasing.',
-              substitutions: ['Dumbbell Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Wide Grip Lat Pulldown', 
-              target: 'Back', 
-              weight: 'RPE 8.5', 
-              reps: '6-8', 
-              sets: '4', 
-              notes: 'Heavier loading.',
-              substitutions: ['Pull-Ups', 'Chin-Ups']
-            },
-            { 
-              name: 'Flat Machine Chest Press', 
-              target: 'Chest', 
-              weight: 'RPE 8.5', 
-              reps: '6-8', 
-              sets: '4', 
-              notes: 'Maximum power.',
-              substitutions: ['Barbell Bench Press', 'Dumbbell Bench Press']
-            },
-            { 
-              name: 'Single Arm Iso Row', 
-              target: 'Back', 
-              weight: 'RPE 9.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Focus on the squeeze.',
-              substitutions: ['Dumbbell Row', 'Seated Cable Row']
-            },
-            { 
-              name: 'Chest Fly (Cable)', 
-              target: 'Chest', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Maximum stretch.',
-              substitutions: ['Pec Deck', 'Dumbbell Flyes']
-            },
-            { 
-              name: 'Bayesian Curl', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Focus on the stretch.',
-              substitutions: ['Incline Dumbbell Curl', 'Cable Bicep Curl']
-            }
-          ],
-          'Day 2': [
-            { 
-              name: 'Lying Leg Curl', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 8.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Control the weight.',
-              substitutions: ['Seated Leg Curl', 'Glute Ham Raise']
-            },
-            { 
-              name: 'Squat (Smith Machine)', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 8.5', 
-              reps: '4-6', 
-              sets: '4', 
-              notes: 'Heavier loading.',
-              substitutions: ['Back Squat', 'Hack Squat']
-            },
-            { 
-              name: 'Romanian Deadlift (Dumbbell)', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 8.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Focus on the stretch.',
-              substitutions: ['Barbell RDL', 'Stiff Leg Deadlift']
-            },
-            { 
-              name: 'Leg Extension', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Maximum pump.',
-              substitutions: ['Sissy Squat', 'Bulgarian Split Squat']
-            },
-            { 
-              name: 'Standing Calf Raise', 
-              target: 'Calves', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '5', 
-              notes: 'Full range.',
-              substitutions: ['Seated Calf Raise', 'Leg Press Calf Raise']
-            },
-            { 
-              name: 'Hip Abductor (Machine)', 
-              target: 'Legs (Glutes)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Controlled reps.',
-              substitutions: ['Cable Hip Abduction', 'Band Abduction']
-            }
-          ],
-          'Day 3': [],
-          'Day 5': [
-            { 
-              name: 'Lateral Raise (Cable)', 
-              target: 'Shoulders', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Constant tension.',
-              substitutions: ['Dumbbell Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Bent Over Row (Barbell)', 
-              target: 'Back', 
-              weight: 'RPE 8.5', 
-              reps: '6-8', 
-              sets: '4', 
-              notes: 'Heavy rows.',
-              substitutions: ['Dumbbell Row', 'Seated Cable Row']
-            },
-            { 
-              name: 'Incline Bench Press (Dumbbell)', 
-              target: 'Chest', 
-              weight: 'RPE 8.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Upper chest focus.',
-              substitutions: ['Incline Barbell Press', 'Incline Machine Press']
-            },
-            { 
-              name: 'Lat Pulldown (Neutral Grip)', 
-              target: 'Back', 
-              weight: 'RPE 8.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Focus on lats.',
-              substitutions: ['Wide Grip Pulldown', 'Pull-Ups']
-            },
-            { 
-              name: 'Reverse Pec Deck', 
-              target: 'Shoulders (Rear)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Rear delt focus.',
-              substitutions: ['Face Pulls', 'Bent Over Lateral Raise']
-            },
-            { 
-              name: 'Overhead Tricep Extension (Cable)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Deep stretch.',
-              substitutions: ['Skull Crushers', 'Tricep Pushdown']
-            }
-          ],
-          'Day 7': [
-            { 
-              name: 'Romanian Deadlift (Barbell)', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 8.5', 
-              reps: '4-6', 
-              sets: '4', 
-              notes: 'Heavy loading.',
-              substitutions: ['Dumbbell RDL', 'Stiff Leg Deadlift']
-            },
-            { 
-              name: 'Leg Press', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 8.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Drive hard.',
-              substitutions: ['Hack Squat', 'Smith Machine Squat']
-            },
-            { 
-              name: 'Reverse Lunge (Barbell)', 
-              target: 'Legs', 
-              weight: 'RPE 9.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Control the balance.',
-              substitutions: ['Dumbbell Lunge', 'Bulgarian Split Squat']
-            },
-            { 
-              name: 'Hyperextension', 
-              target: 'Back/Hams', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Focus on glutes/hams.',
-              substitutions: ['Glute Ham Raise', 'Good Mornings']
-            },
-            { 
-              name: 'Standing Calf Raise', 
-              target: 'Calves', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '5', 
-              notes: 'Full range.',
-              substitutions: ['Seated Calf Raise', 'Leg Press Calf Raise']
-            },
-            { 
-              name: 'Hip Abductor (Machine)', 
-              target: 'Legs (Glutes)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Controlled reps.',
-              substitutions: ['Cable Hip Abduction', 'Band Abduction']
-            }
-          ],
-          'Saturday': [
-            { 
-              name: 'Bicep Curl (Cable)', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 9.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'No swinging.',
-              substitutions: ['Dumbbell Curl', 'Barbell Curl']
-            },
-            { 
-              name: 'Skull Crusher (Barbell)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 8.5', 
-              reps: '8-10', 
-              sets: '4', 
-              notes: 'Keep elbows in.',
-              substitutions: ['Tricep Pushdown', 'Overhead Extension']
-            },
-            { 
-              name: 'Incline Curl (Dumbbell)', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Stretch long head.',
-              substitutions: ['Bayesian Curl', 'Preacher Curl']
-            },
-            { 
-              name: 'Tricep Extension (Cable)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 9.5', 
-              reps: '10-12', 
-              sets: '4', 
-              notes: 'Squeeze at bottom.',
-              substitutions: ['Skull Crushers', 'Overhead Extension']
-            },
-            { 
-              name: 'Lateral Raise (Dumbbell)', 
-              target: 'Shoulders', 
-              weight: 'RPE 9.5', 
-              reps: '15-20', 
-              sets: '3', 
-              notes: 'Side delt focus.',
-              substitutions: ['Cable Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Leg Raise (Captain\'s Chair)', 
-              target: 'Abs', 
-              weight: 'Bodyweight', 
-              reps: 'Failure', 
-              sets: '4', 
-              notes: 'Maximum volume.',
-              substitutions: ['Hanging Leg Raise', 'Crunches']
-            }
-          ]
-        }
-      },
-      '9-10': {
-        days: {
-          'Day 1': [
-            { 
-              name: 'Behind The Back Lateral Raise (Cable)', 
-              target: 'Shoulders', 
-              weight: 'RPE 9-10', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Peaking phase.',
-              substitutions: ['Dumbbell Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Wide Grip Lat Pulldown', 
-              target: 'Back', 
-              weight: 'RPE 9', 
-              reps: '4-6', 
-              sets: '5', 
-              notes: 'Maximum power.',
-              substitutions: ['Pull-Ups', 'Chin-Ups']
-            },
-            { 
-              name: 'Flat Machine Chest Press', 
-              target: 'Chest', 
-              weight: 'RPE 9', 
-              reps: '4-6', 
-              sets: '5', 
-              notes: 'Maximum effort.',
-              substitutions: ['Barbell Bench Press', 'Dumbbell Bench Press']
-            },
-            { 
-              name: 'Single Arm Iso Row', 
-              target: 'Back', 
-              weight: 'RPE 10', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Go to failure.',
-              substitutions: ['Dumbbell Row', 'Seated Cable Row']
-            },
-            { 
-              name: 'Chest Fly (Cable)', 
-              target: 'Chest', 
-              weight: 'RPE 10', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum stretch.',
-              substitutions: ['Pec Deck', 'Dumbbell Flyes']
-            },
-            { 
-              name: 'Bayesian Curl', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 10', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum squeeze.',
-              substitutions: ['Incline Dumbbell Curl', 'Cable Bicep Curl']
-            }
-          ],
-          'Day 2': [
-            { 
-              name: 'Lying Leg Curl', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 9', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Maximum intensity.',
-              substitutions: ['Seated Leg Curl', 'Glute Ham Raise']
-            },
-            { 
-              name: 'Squat (Smith Machine)', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 9', 
-              reps: '2-4', 
-              sets: '5', 
-              notes: 'Heavy doubles/triples.',
-              substitutions: ['Back Squat', 'Hack Squat']
-            },
-            { 
-              name: 'Romanian Deadlift (Dumbbell)', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 9', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Maximum stretch.',
-              substitutions: ['Barbell RDL', 'Stiff Leg Deadlift']
-            },
-            { 
-              name: 'Leg Extension', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Beyond failure.',
-              substitutions: ['Sissy Squat', 'Bulgarian Split Squat']
-            },
-            { 
-              name: 'Standing Calf Raise', 
-              target: 'Calves', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '6', 
-              notes: 'Maximum stretch.',
-              substitutions: ['Seated Calf Raise', 'Leg Press Calf Raise']
-            },
-            { 
-              name: 'Hip Abductor (Machine)', 
-              target: 'Legs (Glutes)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum effort.',
-              substitutions: ['Cable Hip Abduction', 'Band Abduction']
-            }
-          ],
-          'Day 3': [
-            { 
-              name: 'Lateral Raise (Cable)', 
-              target: 'Shoulders', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum volume.',
-              substitutions: ['Dumbbell Lateral Raise', 'Machine Lateral Raise']
-            },
-            { 
-              name: 'Bent Over Row (Barbell)', 
-              target: 'Back', 
-              weight: 'RPE 9', 
-              reps: '4-6', 
-              sets: '5', 
-              notes: 'Maximum effort.',
-              substitutions: ['Dumbbell Row', 'Seated Cable Row']
-            },
-            { 
-              name: 'Incline Bench Press (Dumbbell)', 
-              target: 'Chest', 
-              weight: 'RPE 9', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Heavy loading.',
-              substitutions: ['Incline Barbell Press', 'Incline Machine Press']
-            },
-            { 
-              name: 'Lat Pulldown (Neutral Grip)', 
-              target: 'Back', 
-              weight: 'RPE 9', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Maximum intensity.',
-              substitutions: ['Wide Grip Pulldown', 'Pull-Ups']
-            },
-            { 
-              name: 'Reverse Pec Deck', 
-              target: 'Shoulders (Rear)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Rear delt focus.',
-              substitutions: ['Face Pulls', 'Bent Over Lateral Raise']
-            },
-            { 
-              name: 'Overhead Tricep Extension (Cable)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum stretch.',
-              substitutions: ['Skull Crushers', 'Tricep Pushdown']
-            }
-          ],
-          'Day 5': [
-            { 
-              name: 'Romanian Deadlift (Barbell)', 
-              target: 'Legs (Hams)', 
-              weight: 'RPE 9', 
-              reps: '2-4', 
-              sets: '5', 
-              notes: 'Maximum power.',
-              substitutions: ['Dumbbell RDL', 'Stiff Leg Deadlift']
-            },
-            { 
-              name: 'Leg Press', 
-              target: 'Legs (Quads)', 
-              weight: 'RPE 9', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Maximum depth.',
-              substitutions: ['Hack Squat', 'Smith Machine Squat']
-            },
-            { 
-              name: 'Reverse Lunge (Barbell)', 
-              target: 'Legs', 
-              weight: 'RPE 10+', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Finish strong.',
-              substitutions: ['Dumbbell Lunge', 'Bulgarian Split Squat']
-            },
-            { 
-              name: 'Hyperextension', 
-              target: 'Back/Hams', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum effort.',
-              substitutions: ['Glute Ham Raise', 'Good Mornings']
-            },
-            { 
-              name: 'Standing Calf Raise', 
-              target: 'Calves', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '6', 
-              notes: 'Full range.',
-              substitutions: ['Seated Calf Raise', 'Leg Press Calf Raise']
-            },
-            { 
-              name: 'Hip Abductor (Machine)', 
-              target: 'Legs (Glutes)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum effort.',
-              substitutions: ['Cable Hip Abduction', 'Band Abduction']
-            }
-          ],
-          'Day 7': [
-            { 
-              name: 'Shrug (Band)', 
-              target: 'Back (Traps)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum squeeze.',
-              substitutions: ['Barbell Shrug', 'Dumbbell Shrug']
-            },
-            { 
-              name: 'Wrist Curls', 
-              target: 'Arms (Forearms)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum volume.',
-              substitutions: ['Reverse Wrist Curls', 'Hammer Curls']
-            },
-            { 
-              name: 'Bicep Curl (Cable)', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 10+', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Maximum pump.',
-              substitutions: ['Dumbbell Curl', 'Barbell Curl']
-            },
-            { 
-              name: 'Skull Crusher (Barbell)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 9', 
-              reps: '6-8', 
-              sets: '5', 
-              notes: 'Maximum intensity.',
-              substitutions: ['Tricep Pushdown', 'Overhead Extension']
-            },
-            { 
-              name: 'Incline Curl (Dumbbell)', 
-              target: 'Arms (Biceps)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum stretch.',
-              substitutions: ['Bayesian Curl', 'Preacher Curl']
-            },
-            { 
-              name: 'Tricep Extension (Cable)', 
-              target: 'Arms (Triceps)', 
-              weight: 'RPE 10+', 
-              reps: '8-10', 
-              sets: '5', 
-              notes: 'Maximum squeeze.',
-              substitutions: ['Skull Crushers', 'Overhead Extension']
-            },
-            { 
-              name: 'Leg Raise (Captain\'s Chair)', 
-              target: 'Abs', 
-              weight: 'Bodyweight', 
-              reps: 'Failure', 
-              sets: '5', 
-              notes: 'Maximum volume.',
-              substitutions: ['Hanging Leg Raise', 'Crunches']
-            }
-          ]
-        }
-      }
-    }
-  }
 ];
