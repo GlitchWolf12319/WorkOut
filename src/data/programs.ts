@@ -24,12 +24,30 @@ export interface Program {
   };
   optionalRestDays?: string[];
   weakpointOptions?: string[];
-  weakpointAdditions?: {
-    [weakpoint: string]: {
-      [day: string]: ProgramExercise[];
-    };
-  };
 }
+
+export const WEAKPOINT_MAPPING: Record<string, { ex1: Partial<ProgramExercise>, ex2: Partial<ProgramExercise> }> = {
+  'Chest': {
+    ex1: { name: 'Pec Deck / Machine Flye', target: 'Chest', videoUrl: 'https://www.youtube.com/watch?v=NPa8YvUg4CM' },
+    ex2: { name: 'Incline DB Press', target: 'Chest', videoUrl: 'https://www.youtube.com/watch?v=8iPEnn-ltC8' }
+  },
+  'Back': {
+    ex1: { name: 'Chest-Supported Machine Row', target: 'Back (Mid)', videoUrl: 'https://www.youtube.com/watch?v=ijsSiWSzYw0' },
+    ex2: { name: 'Lat Pulldown (Neutral Grip)', target: 'Back (Lats)', videoUrl: 'https://www.youtube.com/watch?v=8W67lZ5mwTU' }
+  },
+  'Shoulders': {
+    ex1: { name: 'Dumbbell Lateral Raise', target: 'Shoulders (Side)', videoUrl: 'https://www.youtube.com/watch?v=D-kqUKEQZZ0' },
+    ex2: { name: 'Reverse Pec Deck / Machine Rear Delt Flye', target: 'Shoulders (Rear)', videoUrl: 'https://www.youtube.com/watch?v=552L1K3Rb_Q' }
+  },
+  'Arms': {
+    ex1: { name: 'Cable Bicep Curl', target: 'Arms (Biceps)', videoUrl: 'https://www.youtube.com/watch?v=CWH5J_7kzjM' },
+    ex2: { name: 'Overhead Cable Triceps Extension', target: 'Arms (Triceps)', videoUrl: 'https://www.youtube.com/watch?v=9_I1PqZAjdA' }
+  },
+  'Legs': {
+    ex1: { name: 'Leg Extension', target: 'Legs (Quads)' },
+    ex2: { name: 'Lying Leg Curl', target: 'Legs (Hams)' }
+  }
+};
 
 export const PROGRAMS: Program[] = [
   {
@@ -52,34 +70,6 @@ export const PROGRAMS: Program[] = [
     },
     optionalRestDays: ['Day 5', 'Day 10'],
     weakpointOptions: ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs'],
-    weakpointAdditions: {
-      'Chest': {
-        'Day 4': [
-          { name: 'Pec Deck Fly', target: 'Chest', weight: 'RPE 9', reps: '12-15', sets: '2', notes: 'Focus on the stretch and squeeze.' }
-        ]
-      },
-      'Back': {
-        'Day 1': [
-          { name: 'Lat Pulldown', target: 'Back', weight: 'RPE 9', reps: '10-12', sets: '2', notes: 'Pull with elbows.' }
-        ]
-      },
-      'Shoulders': {
-        'Day 2': [
-          { name: 'Dumbbell Lateral Raise', target: 'Shoulders', weight: 'RPE 9', reps: '15-20', sets: '2', notes: 'High volume.' }
-        ]
-      },
-      'Arms': {
-        'Day 3': [
-          { name: 'Incline DB Curl', target: 'Biceps', weight: 'RPE 9', reps: '10-12', sets: '2', notes: 'Deep stretch.' },
-          { name: 'Overhead Extension', target: 'Triceps', weight: 'RPE 9', reps: '12-15', sets: '2', notes: 'Full extension.' }
-        ]
-      },
-      'Legs': {
-        'Day 6': [
-          { name: 'Leg Extension', target: 'Quads', weight: 'RPE 9', reps: '15-20', sets: '2', notes: 'Burnout.' }
-        ]
-      }
-    },
     weeks: {
       "1": {
         "days": {
@@ -191,6 +181,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up and out in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -909,6 +900,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up and out in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -1627,6 +1619,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up and out in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -2345,6 +2338,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up and out in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -3063,6 +3057,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "2",
               "notes": "Raise the cables up and out in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -3781,6 +3776,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -4473,6 +4469,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -5165,6 +5162,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -5857,6 +5855,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"
@@ -6549,6 +6548,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Raise the cables up in a \"Y\" motion. Really try to connect with the middle delt fibers as you sweep the weight up and out.",
+              "videoUrl": "https://www.youtube.com/watch?v=fjiOCmFljDM",
               "substitutions": [
                 "Cross-Body Cable Y-Raise",
                 "DB Lateral Raise"

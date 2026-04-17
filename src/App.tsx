@@ -69,7 +69,7 @@ import {
   WeightEntry,
   WorkoutSet
 } from './types';
-import { PROGRAMS, Program } from './data/programs';
+import { PROGRAMS, Program, WEAKPOINT_MAPPING } from './data/programs';
 import { auth, db, googleProvider } from './firebase';
 import { 
   onAuthStateChanged, 
@@ -262,10 +262,6 @@ function App() {
     const saved = localStorage.getItem('sovereign_program_start_date');
     return saved ? saved : format(new Date(), 'yyyy-MM-dd');
   });
-  const [isDeloadEnabled, setIsDeloadEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('sovereign_deload_enabled');
-    return saved === 'true';
-  });
   const [currentWeight, setCurrentWeight] = useState<number>(() => {
     const saved = localStorage.getItem('sovereign_current_weight');
     return saved ? parseFloat(saved) : 75;
@@ -400,65 +396,6 @@ function App() {
     });
   }, [nutritionGoal, hasInitialSyncCompleted]);
 
-  const getDeloadStatus = useCallback((date: Date = new Date()) => {
-    if (!isDeloadEnabled) return { isDeloadWeek: false, currentWeek: 0, weekInCycle: 0, isActiveProgram: false };
-    
-    const start = new Date(programStartDate);
-    start.setHours(0, 0, 0, 0);
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-    
-    const diffTime = checkDate.getTime() - start.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const currentWeek = Math.floor(diffDays / 7) + 1;
-    
-    if (currentWeek < 1) return { isDeloadWeek: false, currentWeek, weekInCycle: 0, isActiveProgram: false };
-
-    const cycleLength = programDuration + 1;
-    const weekInCycle = ((currentWeek - 1) % cycleLength) + 1;
-    const isDeloadWeek = weekInCycle === cycleLength;
-    
-    return { isDeloadWeek, currentWeek, weekInCycle, isActiveProgram: true };
-  }, [isDeloadEnabled, programStartDate, programDuration]);
-
-  const applyDeloadIfNecessary = useCallback((exercises: WorkoutItem[], date: Date = new Date()) => {
-    const { isDeloadWeek } = getDeloadStatus(date);
-    if (!isDeloadWeek) return exercises.map(ex => ({ ...ex, isDeload: false }));
-
-    return exercises.map(ex => {
-      const numSets = parseInt(ex.sets) || 1;
-      const deloadSets = Math.max(1, numSets - 1);
-      const deloadReps = Math.max(1, Math.floor(ex.reps * 0.6));
-      
-      let deloadWeight = ex.weight;
-      const numericWeight = parseFloat(ex.weight.replace(/[^0-9.]/g, ''));
-      if (!isNaN(numericWeight)) {
-        const unit = ex.weight.replace(/[0-9.]/g, '') || 'kg';
-        deloadWeight = `${Math.round(numericWeight * 0.6)}${unit}`;
-      }
-
-      const currentSetData = ex.setData || Array.from({ length: numSets }, () => ({ weight: ex.weight, reps: ex.reps }));
-      const deloadSetData = currentSetData
-        .slice(0, deloadSets)
-        .map(s => {
-          const sWeight = parseFloat(s.weight.replace(/[^0-9.]/g, ''));
-          const sUnit = s.weight.replace(/[0-9.]/g, '') || 'kg';
-          return {
-            weight: isNaN(sWeight) ? s.weight : `${Math.round(sWeight * 0.6)}${sUnit}`,
-            reps: Math.max(1, Math.floor(s.reps * 0.6))
-          };
-        });
-
-      return {
-        ...ex,
-        weight: deloadWeight,
-        reps: deloadReps,
-        sets: deloadSets.toString(),
-        setData: deloadSetData,
-        isDeload: true
-      };
-    });
-  }, [getDeloadStatus]);
   const [lastChecked, setLastChecked] = useState<string | null>(() => {
     return localStorage.getItem('sovereign_last_checked');
   });
@@ -510,7 +447,6 @@ function App() {
         setExp(prev => (data.exp !== undefined && prev !== data.exp) ? data.exp : prev);
         setProgramDuration(prev => (data.programDuration !== undefined && prev !== data.programDuration) ? data.programDuration : prev);
         setProgramStartDate(prev => (data.programStartDate !== undefined && prev !== data.programStartDate) ? data.programStartDate : prev);
-        setIsDeloadEnabled(prev => (data.isDeloadEnabled !== undefined && prev !== data.isDeloadEnabled) ? data.isDeloadEnabled : prev);
         setLastChecked(prev => (data.lastChecked !== undefined && prev !== data.lastChecked) ? data.lastChecked : prev);
         setCurrentWeight(prev => (data.currentWeight !== undefined && prev !== data.currentWeight) ? data.currentWeight : prev);
         setTargetWeight(prev => (data.targetWeight !== undefined && prev !== data.targetWeight) ? data.targetWeight : prev);
@@ -531,7 +467,6 @@ function App() {
           exp,
           programDuration,
           programStartDate,
-          isDeloadEnabled,
           lastChecked,
           currentWeight,
           targetWeight,
@@ -578,7 +513,6 @@ function App() {
           exp,
           programDuration,
           programStartDate,
-          isDeloadEnabled,
           lastChecked,
           currentWeight,
           targetWeight,
@@ -599,7 +533,6 @@ function App() {
         localStorage.setItem('sovereign_exp', (exp ?? 0).toString());
         localStorage.setItem('sovereign_program_duration', (programDuration ?? 0).toString());
         localStorage.setItem('sovereign_program_start_date', programStartDate ?? '');
-        localStorage.setItem('sovereign_deload_enabled', (isDeloadEnabled ?? false).toString());
         localStorage.setItem('sovereign_current_weight', (currentWeight ?? 0).toString());
         localStorage.setItem('sovereign_target_weight', (targetWeight ?? 0).toString());
         localStorage.setItem('sovereign_nutrition_goal', nutritionGoal ?? 'MAINTAIN');
@@ -621,7 +554,7 @@ function App() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, isDeloadEnabled, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, hasInitialSyncCompleted]);
+  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, hasInitialSyncCompleted]);
 
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -936,18 +869,39 @@ function App() {
           // Fallback
         }
       }
-      setWorkout(applyDeloadIfNecessary(todaySchedule.exercises.map(ex => ({ ...ex, completed: false }))));
+      setWorkout(todaySchedule.exercises.map(ex => ({ ...ex, completed: false })));
     } else {
       setWorkout([]);
     }
-  }, [schedule, applyDeloadIfNecessary, selectedProgramId, programStartDate, weakpointFocus, isRepeatSchedule, customScheduleStartDate]);
+  }, [schedule, selectedProgramId, programStartDate, weakpointFocus, isRepeatSchedule, customScheduleStartDate]);
 
   // Daily Reset & Violation Check
   useEffect(() => {
     const checkViolations = () => {
+      const program = PROGRAMS.find(p => p.id === selectedProgramId);
+      const cycleLen = program ? Object.keys(program.dayLabels || {}).length : 7;
+      
+      const getDayInfo = (date: Date) => {
+        if (!selectedProgramId || !programStartDate) {
+          const idx = date.getDay() === 0 ? 6 : date.getDay() - 1;
+          return { dayName: DAYS[idx] || 'Day 1', weekNum: 1 };
+        }
+        try {
+          const start = parseISO(programStartDate);
+          let diffDays = differenceInDays(date, start);
+          if (diffDays < 0) diffDays = 0;
+          const dayIndex = diffDays % cycleLen;
+          const weekNum = Math.floor(diffDays / cycleLen) + 1;
+          return { dayName: DAYS[dayIndex] || 'Day 1', weekNum };
+        } catch (e) {
+          const idx = date.getDay() === 0 ? 6 : date.getDay() - 1;
+          return { dayName: DAYS[idx] || 'Day 1', weekNum: 1 };
+        }
+      };
+
       const today = new Date();
       const todayStr = format(today, 'yyyy-MM-dd');
-      const currentDayName = DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
+      const { dayName: currentDayName } = getDayInfo(today);
 
       if (lastChecked && lastChecked !== todayStr) {
         const lastDate = parseISO(lastChecked);
@@ -959,23 +913,10 @@ function App() {
 
         while (format(checkDate, 'yyyy-MM-dd') < todayStr && iterations < 31) {
           const dateStr = format(checkDate, 'yyyy-MM-dd');
-          const dayName = DAYS[checkDate.getDay() === 0 ? 6 : checkDate.getDay() - 1];
+          const { dayName, weekNum } = getDayInfo(checkDate);
           
           const hasEntry = archive.some(entry => entry.date === dateStr);
           
-          // Calculate which week this date falls into
-          let weekNum = 1;
-          if (selectedProgramId && programStartDate) {
-            try {
-              const start = parseISO(programStartDate);
-              const diffDays = differenceInDays(checkDate, start);
-              if (diffDays >= 0) {
-                weekNum = Math.floor(diffDays / 7) + 1;
-              }
-            } catch (e) {
-              // fallback
-            }
-          }
           const weekSchedule = schedule[weekNum] || schedule[1] || [];
           const daySchedule = weekSchedule.find(s => s.day === dayName);
           const isRestDay = !daySchedule || daySchedule.exercises.length === 0;
@@ -1099,7 +1040,7 @@ function App() {
             };
           }
           // New exercise
-          return applyDeloadIfNecessary([{ ...schedEx, completed: false }])[0];
+          return { ...schedEx, completed: false };
         });
       });
     } else {
@@ -1122,7 +1063,7 @@ function App() {
         return [];
       });
     }
-  }, [schedule, applyDeloadIfNecessary, archive]);
+  }, [schedule, archive]);
 
   // Keep archive in sync with today's workout state
   useEffect(() => {
@@ -1373,25 +1314,32 @@ function App() {
   };
 
   const getProgramCurrentCycle = () => {
-    if (!programStartDate) return 1;
+    if (!programStartDate || !selectedProgramId) return 1;
     try {
+      const program = PROGRAMS.find(p => p.id === selectedProgramId);
+      const cycleLength = program ? Object.keys(program.dayLabels || {}).length : 7;
+      
       const start = parseISO(programStartDate);
       const now = new Date();
       const diffDays = differenceInDays(now, start);
-      return Math.max(1, Math.floor(diffDays / 10) + 1);
+      return Math.max(1, Math.floor(diffDays / cycleLength) + 1);
     } catch (e) {
       return 1;
     }
   };
 
   const getProgramCurrentDay = () => {
-    if (!programStartDate) return 'Day 1';
+    if (!programStartDate || !selectedProgramId) return 'Day 1';
     try {
+      const program = PROGRAMS.find(p => p.id === selectedProgramId);
+      const cycleLength = program ? Object.keys(program.dayLabels || {}).length : 7;
+
       const start = parseISO(programStartDate);
       const now = new Date();
-      const diffDays = differenceInDays(now, start);
-      const dayIndex = diffDays % 10;
-      return DAYS[dayIndex];
+      let diffDays = differenceInDays(now, start);
+      if (diffDays < 0) diffDays = 0;
+      const dayIndex = diffDays % cycleLength;
+      return DAYS[dayIndex] || 'Day 1';
     } catch (e) {
       return 'Day 1';
     }
@@ -1437,13 +1385,22 @@ function App() {
       newWeeklySchedule[w] = DAYS.map(day => {
         const mappedDay = dayMapping[day] || day;
         const baseExercises = weekData.days[mappedDay] || [];
-        const weakpointExercises = weakpoint && program.weakpointAdditions?.[weakpoint]?.[mappedDay] || [];
         
-        const combinedExercises: WorkoutItem[] = [...baseExercises, ...weakpointExercises].map(ex => ({
-          ...ex,
-          id: Math.random().toString(36).substr(2, 9),
-          completed: false
-        }));
+        const combinedExercises: WorkoutItem[] = baseExercises.map(ex => {
+          let updatedEx = { ...ex };
+          if (weakpoint && WEAKPOINT_MAPPING[weakpoint]) {
+            if (ex.name === 'Weak Point Exercise 1') {
+              updatedEx = { ...updatedEx, ...WEAKPOINT_MAPPING[weakpoint].ex1 };
+            } else if (ex.name === 'Weak Point Exercise 2 (optional)') {
+              updatedEx = { ...updatedEx, ...WEAKPOINT_MAPPING[weakpoint].ex2 };
+            }
+          }
+          return {
+            ...updatedEx,
+            id: Math.random().toString(36).substr(2, 9),
+            completed: false
+          };
+        });
 
         return {
           day,
@@ -1907,7 +1864,7 @@ function App() {
                                       {(item.videoUrl || getExerciseVideoUrl(item.name)) && (
                                         <button 
                                           onClick={() => setActiveVideoUrl((item.videoUrl || getExerciseVideoUrl(item.name))!)}
-                                          className="text-primary-container text-xs flex items-center gap-1 mb-3 hover:underline"
+                                          className="text-error/80 hover:text-error hover:underline text-xs flex items-center gap-1 mb-3 transition-colors font-sans mt-2"
                                         >
                                           <Youtube className="w-3 h-3" /> Watch Tutorial
                                         </button>
@@ -2133,7 +2090,8 @@ function App() {
                             
                             const diffDays = differenceInDays(day, parseISO(programStartDate));
                             const program = PROGRAMS.find(p => p.id === selectedProgramId);
-                            const totalDays = (program?.totalWeeks || 0) * 7;
+                            const cycleLen = program ? Object.keys(program.dayLabels || {}).length : 7;
+                            const totalDays = (program?.totalWeeks || 0) * cycleLen;
                             const isInProgram = diffDays >= 0 && diffDays < totalDays;
                             
                             let weekNum = 0;
@@ -2142,9 +2100,10 @@ function App() {
                             let exercises: any[] = [];
                             
                             if (isInProgram) {
-                              weekNum = Math.floor(diffDays / 7) + 1;
-                              const dayIndex = diffDays % 7;
-                              dayName = DAYS[dayIndex];
+                              const cycleLength = program ? Object.keys(program.dayLabels || {}).length : 7;
+                              weekNum = Math.floor(diffDays / cycleLength) + 1;
+                              const dayIndex = diffDays % cycleLength;
+                              dayName = DAYS[dayIndex] || 'Day 1';
                               
                               let weekData = null;
                               for (const range in program?.weeks || {}) {
@@ -2228,7 +2187,8 @@ function App() {
                             {(() => {
                               const diffDays = differenceInDays(selectedScheduleDate, parseISO(programStartDate));
                               const program = PROGRAMS.find(p => p.id === selectedProgramId);
-                              const totalDays = (program?.totalWeeks || 0) * 7;
+                              const cycleLen = program ? Object.keys(program.dayLabels || {}).length : 7;
+                              const totalDays = (program?.totalWeeks || 0) * cycleLen;
                               const isInProgram = diffDays >= 0 && diffDays < totalDays;
                               
                               if (!isInProgram) {
@@ -2239,9 +2199,9 @@ function App() {
                                 );
                               }
                               
-                              const weekNum = Math.floor(diffDays / 7) + 1;
-                              const dayIndex = diffDays % 7;
-                              const dayName = DAYS[dayIndex];
+                              const weekNum = Math.floor(diffDays / cycleLen) + 1;
+                              const dayIndex = diffDays % cycleLen;
+                              const dayName = DAYS[dayIndex] || 'Day 1';
                               
                               let weekData = null;
                               for (const range in program?.weeks || {}) {

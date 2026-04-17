@@ -12,7 +12,6 @@ export interface WorkoutItem {
   sets: string;
   setData?: WorkoutSet[];
   completed: boolean;
-  isDeload?: boolean;
   notes?: string;
   videoUrl?: string;
 }
