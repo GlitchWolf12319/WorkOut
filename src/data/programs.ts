@@ -27,25 +27,29 @@ export interface Program {
 }
 
 export const WEAKPOINT_MAPPING: Record<string, { ex1: Partial<ProgramExercise>, ex2: Partial<ProgramExercise> }> = {
-  'Chest': {
-    ex1: { name: 'Pec Deck / Machine Flye', target: 'Chest', videoUrl: 'https://www.youtube.com/watch?v=NPa8YvUg4CM' },
-    ex2: { name: 'Incline DB Press', target: 'Chest', videoUrl: 'https://www.youtube.com/watch?v=8iPEnn-ltC8' }
-  },
-  'Back': {
-    ex1: { name: 'Chest-Supported Machine Row', target: 'Back (Mid)', videoUrl: 'https://www.youtube.com/watch?v=ijsSiWSzYw0' },
-    ex2: { name: 'Lat Pulldown (Neutral Grip)', target: 'Back (Lats)', videoUrl: 'https://www.youtube.com/watch?v=8W67lZ5mwTU' }
-  },
   'Shoulders': {
-    ex1: { name: 'Dumbbell Lateral Raise', target: 'Shoulders (Side)', videoUrl: 'https://www.youtube.com/watch?v=D-kqUKEQZZ0' },
-    ex2: { name: 'Reverse Pec Deck / Machine Rear Delt Flye', target: 'Shoulders (Rear)', videoUrl: 'https://www.youtube.com/watch?v=552L1K3Rb_Q' }
+    ex1: { name: 'Cuffed Behind-The-Back Lateral Raise', target: 'Shoulders', substitutions: ['Machine Lateral Raise', 'Dumbbell Lateral Raise'], videoUrl: 'https://www.youtube.com/watch?v=fjiOCmFljDM' },
+    ex2: { name: 'Machine Shoulder Press', target: 'Shoulders', substitutions: ['Smith Machine Shoulder Press', 'Standing DB Arnold Press'] }
   },
-  'Arms': {
-    ex1: { name: 'Cable Bicep Curl', target: 'Arms (Biceps)', videoUrl: 'https://www.youtube.com/watch?v=CWH5J_7kzjM' },
-    ex2: { name: 'Overhead Cable Triceps Extension', target: 'Arms (Triceps)', videoUrl: 'https://www.youtube.com/watch?v=9_I1PqZAjdA' }
+  'Lats': {
+    ex1: { name: 'Cable Lat Prayer', target: 'Lats', substitutions: ['DB Lat Pullover', 'Machine Lat Pullover'], videoUrl: 'https://www.youtube.com/watch?v=YrcnBlH8XDA' },
+    ex2: { name: 'Lat-Focused Cable Row', target: 'Lats', substitutions: ['Elbows-In 1-Arm DB Row', 'Half-Kneeling 1-Arm Lat Pulldown'] }
   },
-  'Legs': {
-    ex1: { name: 'Leg Extension', target: 'Legs (Quads)' },
-    ex2: { name: 'Lying Leg Curl', target: 'Legs (Hams)' }
+  'Quads': {
+    ex1: { name: 'Leg Extension', target: 'Quads', substitutions: ['Reverse Nordics'] },
+    ex2: { name: 'Single-Leg Leg Press', target: 'Quads', substitutions: ['Sissy Squat'] }
+  },
+  'Glutes': {
+    ex1: { name: 'Machine Hip Abduction', target: 'Glutes', substitutions: ['Cable Hip Abduction', 'Lateral Band Walk'] },
+    ex2: { name: 'Barbell Hip Thrust', target: 'Glutes', substitutions: ['Single-Leg DB Hip Thrust'] }
+  },
+  'Chest': {
+    ex1: { name: 'Low Incline DB Flye', target: 'Chest', substitutions: ['Low-To-High Cable Crossover'] },
+    ex2: { name: 'Chest Press Machine', target: 'Chest', notes: 'incline if upper pecs are lagging, flat if entire chest is lagging', substitutions: ['Dumbbell Chest Press'] }
+  },
+  'Neck': {
+    ex1: { name: 'Plate-Loaded Neck Curls', target: 'Neck' },
+    ex2: { name: 'Head Harness Neck Extension', target: 'Neck', substitutions: ['Plate-Loaded Neck Extension'] }
   }
 };
 
@@ -69,7 +73,7 @@ export const PROGRAMS: Program[] = [
       'Day 10': 'REST'
     },
     optionalRestDays: ['Day 5', 'Day 10'],
-    weakpointOptions: ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs'],
+    weakpointOptions: ['Shoulders', 'Lats', 'Quads', 'Glutes', 'Chest', 'Neck'],
     weeks: {
       "1": {
         "days": {
@@ -513,6 +517,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Shrug up and in. Think about shrugging \"up to your ears\". 1-2 second pause in the squeeze (at the top) of each rep, then another 1-2 second pause in the stretch (at the bottom) of each rep.",
+              "videoUrl": "https://www.youtube.com/watch?v=Hy6f1Lz_PiA",
               "substitutions": [
                 "Machine Shrug",
                 "DB Shrug"
@@ -550,6 +555,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -1232,6 +1238,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Shrug up and in. Think about shrugging \"up to your ears\". 1-2 second pause in the squeeze (at the top) of each rep, then another 1-2 second pause in the stretch (at the bottom) of each rep.",
+              "videoUrl": "https://www.youtube.com/watch?v=Hy6f1Lz_PiA",
               "substitutions": [
                 "Machine Shrug",
                 "DB Shrug"
@@ -1269,6 +1276,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -1951,6 +1959,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Shrug up and in. Think about shrugging \"up to your ears\". 1-2 second pause in the squeeze (at the top) of each rep, then another 1-2 second pause in the stretch (at the bottom) of each rep.",
+              "videoUrl": "https://www.youtube.com/watch?v=Hy6f1Lz_PiA",
               "substitutions": [
                 "Machine Shrug",
                 "DB Shrug"
@@ -1988,6 +1997,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -2670,6 +2680,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Shrug up and in. Think about shrugging \"up to your ears\". 1-2 second pause in the squeeze (at the top) of each rep, then another 1-2 second pause in the stretch (at the bottom) of each rep.",
+              "videoUrl": "https://www.youtube.com/watch?v=Hy6f1Lz_PiA",
               "substitutions": [
                 "Machine Shrug",
                 "DB Shrug"
@@ -2707,6 +2718,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -3389,6 +3401,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "2",
               "notes": "Shrug up and in. Think about shrugging \"up to your ears\". 1-2 second pause in the squeeze (at the top) of each rep, then another 1-2 second pause in the stretch (at the bottom) of each rep.",
+              "videoUrl": "https://www.youtube.com/watch?v=Hy6f1Lz_PiA",
               "substitutions": [
                 "Machine Shrug",
                 "DB Shrug"
@@ -3426,6 +3439,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "2",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -3918,6 +3932,7 @@ export const PROGRAMS: Program[] = [
               "reps": "12-15",
               "sets": "3",
               "notes": "Hold a dumbbell and perform a jumping motion without actually leaving the floor, using a slight knee bend, but mostly relying on your calves/ankles to drive the \"jump\". I believe I built a lot of calf mass by doing jump rope; these are meant to provide a similar stimulus, but with more tension.",
+              "videoUrl": "https://www.youtube.com/watch?v=JkY3nBTbRac",
               "substitutions": [
                 "Leg Press Calf Jumps",
                 "Standing Calf Raise"
@@ -4132,6 +4147,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -4611,6 +4627,7 @@ export const PROGRAMS: Program[] = [
               "reps": "12-15",
               "sets": "3",
               "notes": "Hold a dumbbell and perform a jumping motion without actually leaving the floor, using a slight knee bend, but mostly relying on your calves/ankles to drive the \"jump\". I believe I built a lot of calf mass by doing jump rope; these are meant to provide a similar stimulus, but with more tension.",
+              "videoUrl": "https://www.youtube.com/watch?v=JkY3nBTbRac",
               "substitutions": [
                 "Leg Press Calf Jumps",
                 "Standing Calf Raise"
@@ -4825,6 +4842,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -5304,6 +5322,7 @@ export const PROGRAMS: Program[] = [
               "reps": "12-15",
               "sets": "3",
               "notes": "Hold a dumbbell and perform a jumping motion without actually leaving the floor, using a slight knee bend, but mostly relying on your calves/ankles to drive the \"jump\". I believe I built a lot of calf mass by doing jump rope; these are meant to provide a similar stimulus, but with more tension.",
+              "videoUrl": "https://www.youtube.com/watch?v=JkY3nBTbRac",
               "substitutions": [
                 "Leg Press Calf Jumps",
                 "Standing Calf Raise"
@@ -5518,6 +5537,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -5997,6 +6017,7 @@ export const PROGRAMS: Program[] = [
               "reps": "12-15",
               "sets": "3",
               "notes": "Hold a dumbbell and perform a jumping motion without actually leaving the floor, using a slight knee bend, but mostly relying on your calves/ankles to drive the \"jump\". I believe I built a lot of calf mass by doing jump rope; these are meant to provide a similar stimulus, but with more tension.",
+              "videoUrl": "https://www.youtube.com/watch?v=JkY3nBTbRac",
               "substitutions": [
                 "Leg Press Calf Jumps",
                 "Standing Calf Raise"
@@ -6211,6 +6232,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
@@ -6690,6 +6712,7 @@ export const PROGRAMS: Program[] = [
               "reps": "12-15",
               "sets": "3",
               "notes": "Hold a dumbbell and perform a jumping motion without actually leaving the floor, using a slight knee bend, but mostly relying on your calves/ankles to drive the \"jump\". I believe I built a lot of calf mass by doing jump rope; these are meant to provide a similar stimulus, but with more tension.",
+              "videoUrl": "https://www.youtube.com/watch?v=JkY3nBTbRac",
               "substitutions": [
                 "Leg Press Calf Jumps",
                 "Standing Calf Raise"
@@ -6904,6 +6927,7 @@ export const PROGRAMS: Program[] = [
               "reps": "10-12",
               "sets": "3",
               "notes": "Think about \"drawing a sword\" as you do the positive. Sweep your arm up, out and across your body. It may take a few weeks to get used to these if you haven't done them before, but once they click, they really click.",
+              "videoUrl": "https://www.youtube.com/watch?v=64RFJSCJuN8",
               "substitutions": [
                 "Machine Lateral Raise",
                 "DB Lateral Raise"
