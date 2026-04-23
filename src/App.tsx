@@ -517,79 +517,84 @@ function App() {
     return () => unsubscribe();
   }, [isAuthReady, user]);
 
-  // Firestore Sync - Save Data (Debounced)
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [syncRequestCount, setSyncRequestCount] = useState(0);
+  const prevSyncCount = useRef(0);
+  const triggerCloudSync = useCallback(() => {
+    setSyncRequestCount(c => c + 1);
+  }, []);
+
+  // Local Storage Sync (Immediate on state change)
   useEffect(() => {
-    if (!isAuthReady || !user || isSyncing || !hasInitialSyncCompleted) return;
+    localStorage.setItem('sovereign_workout', JSON.stringify(workout));
+    localStorage.setItem('sovereign_schedule', JSON.stringify(schedule));
+    localStorage.setItem('sovereign_archive', JSON.stringify(archive));
+    localStorage.setItem('sovereign_exp', (exp ?? 0).toString());
+    localStorage.setItem('sovereign_program_duration', (programDuration ?? 0).toString());
+    localStorage.setItem('sovereign_program_start_date', programStartDate ?? '');
+    localStorage.setItem('sovereign_current_weight', (currentWeight ?? 0).toString());
+    localStorage.setItem('sovereign_target_weight', (targetWeight ?? 0).toString());
+    localStorage.setItem('sovereign_nutrition_goal', nutritionGoal ?? 'MAINTAIN');
+    localStorage.setItem('sovereign_protein_per_kg', (proteinPerKg ?? 2.0).toString());
+    localStorage.setItem('sovereign_nutrition_start_date', nutritionStartDate ?? '');
+    localStorage.setItem('sovereign_nutrition_duration_weeks', (nutritionDurationWeeks ?? 12).toString());
+    localStorage.setItem('sovereign_calories', (calories ?? 2500).toString());
+    localStorage.setItem('sovereign_auto_calories', (isAutoCalories ?? true).toString());
+    localStorage.setItem('sovereign_body_fat', (bodyFat ?? 15).toString());
+    localStorage.setItem('sovereign_cardio_completed', (cardioCompleted ?? false).toString());
+    localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory ?? []));
+    if (selectedProgramId) localStorage.setItem('sovereign_selected_program_id', selectedProgramId);
+    else localStorage.removeItem('sovereign_selected_program_id');
+    if (weakpointFocus) localStorage.setItem('sovereign_weakpoint_focus', weakpointFocus);
+    else localStorage.removeItem('sovereign_weakpoint_focus');
+    localStorage.setItem('sovereign_day_mapping', JSON.stringify(dayMapping ?? {}));
+    if (customScheduleStartDate) localStorage.setItem('sovereign_custom_schedule_start_date', customScheduleStartDate);
+    if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
+  }, [workout, schedule, archive, exp, lastChecked, programDuration, programStartDate, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, selectedProgramId, weakpointFocus, dayMapping, customScheduleStartDate, bodyFat, cardioCompleted, theme]);
 
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+  // Firestore Sync - Save Data (Triggered only on explicit actions)
+  useEffect(() => {
+    if (!isAuthReady || !user || !hasInitialSyncCompleted) return;
 
-    saveTimeoutRef.current = setTimeout(async () => {
+    if (syncRequestCount > prevSyncCount.current) {
+      prevSyncCount.current = syncRequestCount;
+      setIsSyncing(true);
+      
       const userDocRef = doc(db, 'users', user.uid);
-      try {
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          workout,
-          schedule,
-          archive,
-          exp,
-          programDuration,
-          programStartDate,
-          lastChecked,
-          currentWeight,
-          targetWeight,
-          nutritionGoal,
-          proteinPerKg,
-          nutritionStartDate,
-          nutritionDurationWeeks,
-          calories,
-          isAutoCalories,
-          weightHistory,
-          selectedProgramId,
-          weakpointFocus,
-          dayMapping,
-          customScheduleStartDate,
-          bodyFat,
-          cardioCompleted,
-          theme,
-          level: Math.floor(exp / 1000) + 1,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-        
-        localStorage.setItem('sovereign_workout', JSON.stringify(workout));
-        localStorage.setItem('sovereign_schedule', JSON.stringify(schedule));
-        localStorage.setItem('sovereign_archive', JSON.stringify(archive));
-        localStorage.setItem('sovereign_exp', (exp ?? 0).toString());
-        localStorage.setItem('sovereign_program_duration', (programDuration ?? 0).toString());
-        localStorage.setItem('sovereign_program_start_date', programStartDate ?? '');
-        localStorage.setItem('sovereign_current_weight', (currentWeight ?? 0).toString());
-        localStorage.setItem('sovereign_target_weight', (targetWeight ?? 0).toString());
-        localStorage.setItem('sovereign_nutrition_goal', nutritionGoal ?? 'MAINTAIN');
-        localStorage.setItem('sovereign_protein_per_kg', (proteinPerKg ?? 2.0).toString());
-        localStorage.setItem('sovereign_nutrition_start_date', nutritionStartDate ?? '');
-        localStorage.setItem('sovereign_nutrition_duration_weeks', (nutritionDurationWeeks ?? 12).toString());
-        localStorage.setItem('sovereign_calories', (calories ?? 2500).toString());
-        localStorage.setItem('sovereign_auto_calories', (isAutoCalories ?? true).toString());
-        localStorage.setItem('sovereign_body_fat', (bodyFat ?? 15).toString());
-        localStorage.setItem('sovereign_cardio_completed', (cardioCompleted ?? false).toString());
-        localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory ?? []));
-        if (selectedProgramId) localStorage.setItem('sovereign_selected_program_id', selectedProgramId);
-        else localStorage.removeItem('sovereign_selected_program_id');
-        if (weakpointFocus) localStorage.setItem('sovereign_weakpoint_focus', weakpointFocus);
-        else localStorage.removeItem('sovereign_weakpoint_focus');
-        localStorage.setItem('sovereign_day_mapping', JSON.stringify(dayMapping ?? {}));
-        if (customScheduleStartDate) localStorage.setItem('sovereign_custom_schedule_start_date', customScheduleStartDate);
-        if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
-      } catch (err) {
+      setDoc(userDocRef, {
+        uid: user.uid,
+        workout,
+        schedule,
+        archive,
+        exp,
+        programDuration,
+        programStartDate,
+        lastChecked,
+        currentWeight,
+        targetWeight,
+        nutritionGoal,
+        proteinPerKg,
+        nutritionStartDate,
+        nutritionDurationWeeks,
+        calories,
+        isAutoCalories,
+        weightHistory,
+        selectedProgramId,
+        weakpointFocus,
+        dayMapping,
+        customScheduleStartDate,
+        bodyFat,
+        cardioCompleted,
+        theme,
+        level: Math.floor(exp / 1000) + 1,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(err => {
         console.error("Failed to save to Firestore", err);
         handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
-      }
-    }, 2000); // 2 second debounce
-
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
-  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, selectedProgramId, weakpointFocus, dayMapping, customScheduleStartDate, bodyFat, cardioCompleted, theme, hasInitialSyncCompleted]);
+      }).finally(() => {
+        setIsSyncing(false);
+      });
+    }
+  }, [syncRequestCount, workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, selectedProgramId, weakpointFocus, dayMapping, customScheduleStartDate, bodyFat, cardioCompleted, theme, hasInitialSyncCompleted]);
 
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -1150,7 +1155,8 @@ function App() {
 
     setIsTimerActive(false);
     setIsWorkoutActive(false);
-  }, [workout, timer, cardioCompleted]);
+    triggerCloudSync();
+  }, [workout, timer, cardioCompleted, triggerCloudSync]);
 
   const completedCount = workout.filter(item => item.completed).length;
   const workoutProgress = workout.length > 0 ? (workout.filter(ex => ex.completed).length / workout.length) * 100 : 100;
@@ -1253,6 +1259,7 @@ function App() {
 
     setWorkout(prev => prev.map(i => i.id === id ? { ...i, completed: newCompleted } : i));
     setExp(prev => prev + expChange);
+    triggerCloudSync();
   };
 
   const updateWorkoutItem = (id: string, field: keyof WorkoutItem, value: any) => {
@@ -1440,6 +1447,7 @@ function App() {
     localStorage.setItem('sovereign_schedule', JSON.stringify(newWeeklySchedule));
     setCurrentWeekTab(getProgramCurrentCycle());
     syncWorkoutWithSchedule();
+    triggerCloudSync();
   };
 
   const applyCustomSchedule = () => {
@@ -1457,6 +1465,7 @@ function App() {
       localStorage.removeItem('sovereign_weakpoint_focus');
       localStorage.setItem('sovereign_schedule', JSON.stringify(newSchedule));
       setIsProtocolDropdownOpen(false);
+      triggerCloudSync();
     }
   };
 
@@ -1808,6 +1817,7 @@ function App() {
                             e.stopPropagation(); 
                             if (!isTimerActive) setIsTimerActive(true);
                             setCardioCompleted(!cardioCompleted); 
+                            triggerCloudSync();
                           }}
                           className={`rounded-xl border px-4 py-2 font-sans font-semibold text-xs font-bold transition-all ${
                             cardioCompleted 
