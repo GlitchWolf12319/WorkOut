@@ -349,6 +349,14 @@ function App() {
       return [];
     }
   });
+  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald'>(() => {
+    return (localStorage.getItem('sovereign_theme') as any) || 'red';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('sovereign_theme', theme);
+  }, [theme]);
 
   // Adaptive Caloric Engine
   useEffect(() => {
@@ -457,6 +465,13 @@ function App() {
         setCalories(prev => (data.calories !== undefined && prev !== data.calories) ? data.calories : prev);
         setIsAutoCalories(prev => (data.isAutoCalories !== undefined && prev !== data.isAutoCalories) ? data.isAutoCalories : prev);
         setWeightHistory(prev => (data.weightHistory && JSON.stringify(prev) !== JSON.stringify(data.weightHistory)) ? data.weightHistory : prev);
+        setSelectedProgramId(prev => (data.selectedProgramId !== undefined && prev !== data.selectedProgramId) ? data.selectedProgramId : prev);
+        setWeakpointFocus(prev => (data.weakpointFocus !== undefined && prev !== data.weakpointFocus) ? data.weakpointFocus : prev);
+        setDayMapping(prev => (data.dayMapping && JSON.stringify(prev) !== JSON.stringify(data.dayMapping)) ? data.dayMapping : prev);
+        setCustomScheduleStartDate(prev => (data.customScheduleStartDate !== undefined && prev !== data.customScheduleStartDate) ? data.customScheduleStartDate : prev);
+        setBodyFat(prev => (data.bodyFat !== undefined && prev !== data.bodyFat) ? data.bodyFat : prev);
+        setCardioCompleted(prev => (data.cardioCompleted !== undefined && prev !== data.cardioCompleted) ? data.cardioCompleted : prev);
+        setTheme(prev => (data.theme !== undefined && prev !== data.theme) ? data.theme : prev);
       } else {
         // First time user - initialize Firestore with local data or defaults
         const initialData = {
@@ -477,6 +492,13 @@ function App() {
           calories,
           isAutoCalories,
           weightHistory,
+          selectedProgramId,
+          weakpointFocus,
+          dayMapping,
+          customScheduleStartDate,
+          bodyFat,
+          cardioCompleted,
+          theme,
           level: 1,
           updatedAt: new Date().toISOString()
         };
@@ -523,6 +545,13 @@ function App() {
           calories,
           isAutoCalories,
           weightHistory,
+          selectedProgramId,
+          weakpointFocus,
+          dayMapping,
+          customScheduleStartDate,
+          bodyFat,
+          cardioCompleted,
+          theme,
           level: Math.floor(exp / 1000) + 1,
           updatedAt: new Date().toISOString()
         }, { merge: true });
@@ -544,6 +573,12 @@ function App() {
         localStorage.setItem('sovereign_body_fat', (bodyFat ?? 15).toString());
         localStorage.setItem('sovereign_cardio_completed', (cardioCompleted ?? false).toString());
         localStorage.setItem('sovereign_weight_history', JSON.stringify(weightHistory ?? []));
+        if (selectedProgramId) localStorage.setItem('sovereign_selected_program_id', selectedProgramId);
+        else localStorage.removeItem('sovereign_selected_program_id');
+        if (weakpointFocus) localStorage.setItem('sovereign_weakpoint_focus', weakpointFocus);
+        else localStorage.removeItem('sovereign_weakpoint_focus');
+        localStorage.setItem('sovereign_day_mapping', JSON.stringify(dayMapping ?? {}));
+        if (customScheduleStartDate) localStorage.setItem('sovereign_custom_schedule_start_date', customScheduleStartDate);
         if (lastChecked) localStorage.setItem('sovereign_last_checked', lastChecked);
       } catch (err) {
         console.error("Failed to save to Firestore", err);
@@ -554,7 +589,7 @@ function App() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, hasInitialSyncCompleted]);
+  }, [workout, schedule, archive, exp, lastChecked, user, isAuthReady, programDuration, programStartDate, currentWeight, targetWeight, nutritionGoal, proteinPerKg, nutritionStartDate, nutritionDurationWeeks, calories, isAutoCalories, weightHistory, selectedProgramId, weakpointFocus, dayMapping, customScheduleStartDate, bodyFat, cardioCompleted, theme, hasInitialSyncCompleted]);
 
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -590,14 +625,6 @@ function App() {
   const [timer, setTimer] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
-  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald'>(() => {
-    return (localStorage.getItem('sovereign_theme') as any) || 'red';
-  });
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('sovereign_theme', theme);
-  }, [theme]);
   const [timeLeftInDay, setTimeLeftInDay] = useState('');
   const [scheduleMonth, setScheduleMonth] = useState(new Date());
   const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null);
