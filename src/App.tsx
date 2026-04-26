@@ -450,7 +450,14 @@ function App() {
         // Only update if the data is actually different to prevent unnecessary re-renders
         // and potential race conditions with local state updates.
         setWorkout(prev => (data.workout && JSON.stringify(prev) !== JSON.stringify(data.workout)) ? data.workout : prev);
-        setSchedule(prev => (data.schedule && JSON.stringify(prev) !== JSON.stringify(data.schedule)) ? data.schedule : prev);
+        setSchedule(prev => {
+          if (!data.schedule) return prev;
+          let fetchedSchedule = data.schedule;
+          if (Array.isArray(fetchedSchedule)) {
+            fetchedSchedule = { 1: fetchedSchedule };
+          }
+          return JSON.stringify(prev) !== JSON.stringify(fetchedSchedule) ? fetchedSchedule : prev;
+        });
         setArchive(prev => (data.archive && JSON.stringify(prev) !== JSON.stringify(data.archive)) ? data.archive : prev);
         setExp(prev => (data.exp !== undefined && prev !== data.exp) ? data.exp : prev);
         setProgramDuration(prev => (data.programDuration !== undefined && prev !== data.programDuration) ? data.programDuration : prev);
