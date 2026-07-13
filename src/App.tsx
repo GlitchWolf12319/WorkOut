@@ -70,6 +70,7 @@ import {
   WorkoutSet
 } from './types';
 import { PROGRAMS, Program, WEAKPOINT_MAPPING } from './data/programs';
+import { ExerciseVisual } from './components/ExerciseVisual';
 import { auth, db, googleProvider } from './firebase';
 import { 
   onAuthStateChanged, 
@@ -85,6 +86,7 @@ import {
   getDocFromServer
 } from 'firebase/firestore';
 import { videoIds } from './videos';
+import videoTitles from '../video_titles.json';
 
 // Error Handling Spec for Firestore Operations
 enum OperationType {
@@ -200,6 +202,46 @@ const INITIAL_SCHEDULE: ScheduleDay[] = DAYS.map(day => ({
 
 const INITIAL_WORKOUT: WorkoutItem[] = [];
 
+function normalizeSchedule(fetchedSchedule: any): WeeklySchedule {
+  if (!fetchedSchedule) {
+    return { 1: INITIAL_SCHEDULE };
+  }
+  
+  let normalizedSchedule: WeeklySchedule = {};
+  
+  if (Array.isArray(fetchedSchedule)) {
+    fetchedSchedule.forEach((item, index) => {
+      if (!item) return;
+      
+      if (Array.isArray(item)) {
+        const validDays = item.filter(d => d && typeof d === 'object' && typeof d.day === 'string');
+        if (validDays.length > 0) {
+          normalizedSchedule[index] = validDays;
+        }
+      } else if (typeof item === 'object' && typeof item.day === 'string') {
+        if (!normalizedSchedule[1]) {
+          normalizedSchedule[1] = [];
+        }
+        normalizedSchedule[1].push(item);
+      }
+    });
+  } else if (typeof fetchedSchedule === 'object' && fetchedSchedule !== null) {
+    Object.entries(fetchedSchedule).forEach(([key, val]) => {
+      const weekNum = parseInt(key);
+      if (!isNaN(weekNum) && Array.isArray(val)) {
+        const validDays = val.filter(d => d && typeof d === 'object' && typeof d.day === 'string');
+        normalizedSchedule[weekNum] = validDays;
+      }
+    });
+  }
+  
+  if (Object.keys(normalizedSchedule).length === 0) {
+    normalizedSchedule = { 1: INITIAL_SCHEDULE };
+  }
+  
+  return normalizedSchedule;
+}
+
 export default function AppWrapper() {
   return (
     <ErrorBoundary>
@@ -228,11 +270,7 @@ function App() {
     try {
       const saved = localStorage.getItem('sovereign_schedule');
       if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return { 1: parsed };
-        }
-        return parsed;
+        return normalizeSchedule(JSON.parse(saved));
       }
       return { 1: INITIAL_SCHEDULE };
     } catch (e) {
@@ -452,11 +490,8 @@ function App() {
         setWorkout(prev => (data.workout && JSON.stringify(prev) !== JSON.stringify(data.workout)) ? data.workout : prev);
         setSchedule(prev => {
           if (!data.schedule) return prev;
-          let fetchedSchedule = data.schedule;
-          if (Array.isArray(fetchedSchedule)) {
-            fetchedSchedule = { 1: fetchedSchedule };
-          }
-          return JSON.stringify(prev) !== JSON.stringify(fetchedSchedule) ? fetchedSchedule : prev;
+          const normalized = normalizeSchedule(data.schedule);
+          return JSON.stringify(prev) !== JSON.stringify(normalized) ? normalized : prev;
         });
         setArchive(prev => (data.archive && JSON.stringify(prev) !== JSON.stringify(data.archive)) ? data.archive : prev);
         setExp(prev => (data.exp !== undefined && prev !== data.exp) ? data.exp : prev);
@@ -1295,7 +1330,7 @@ function App() {
   const updateWorkoutSet = (exerciseId: string, setIndex: number, field: keyof WorkoutSet, value: string | number) => {
     setWorkout(prev => prev.map(i => {
       if (i.id === exerciseId) {
-        const currentSetData = i.setData || Array.from({ length: parseInt(i.sets) || 1 }, () => ({ weight: i.weight, reps: i.reps }));
+        const currentSetData = i.setData || Array.from({ length: parseInt(i.sets) || 1 }, () => ({ weight: '', reps: i.reps }));
         const newSetData = [...currentSetData];
         newSetData[setIndex] = { ...newSetData[setIndex], [field]: value };
         return { ...i, setData: newSetData };
@@ -1314,6 +1349,48 @@ function App() {
         if (exercise && exercise.videoUrl) return exercise.videoUrl;
       }
     }
+    return null;
+  };
+
+  const findExerciseTemplate = (exName: string) => {
+    for (const program of PROGRAMS) {
+      for (const range in program.weeks) {
+        for (const day in program.weeks[range].days) {
+          const exercise = program.weeks[range].days[day].find(e => e.name === exName);
+          if (exercise) return exercise;
+        }
+      }
+    }
+    for (const wp in WEAKPOINT_MAPPING) {
+      const option = WEAKPOINT_MAPPING[wp];
+      if (option.ex1.name === exName) return option.ex1;
+      if (option.ex2.name === exName) return option.ex2;
+    }
+    return null;
+  };
+
+  const getExerciseVideoUrlByName = (exName: string) => {
+    // 1. Check template
+    const template = findExerciseTemplate(exName);
+    if (template && template.videoUrl) return template.videoUrl;
+
+    // 2. Check program
+    const programUrl = getExerciseVideoUrl(exName);
+    if (programUrl) return programUrl;
+
+    // 3. Search in video_titles.json
+    try {
+      const normalizedExName = exName.trim().toLowerCase();
+      const match = Object.entries(videoTitles).find(([id, name]) => 
+        (name as string).trim().toLowerCase() === normalizedExName
+      );
+      if (match) {
+        return `https://www.youtube.com/watch?v=${match[0]}`;
+      }
+    } catch (e) {
+      console.error("Error looking up video by name in video_titles.json", e);
+    }
+
     return null;
   };
 
@@ -1867,15 +1944,18 @@ function App() {
                                 className="p-3 md:p-4 flex items-center justify-between cursor-pointer"
                                 onClick={() => toggleExpandedExercise(item.id)}
                               >
-                                <div className="flex flex-col gap-1">
-                                  <div className={`font-sans font-semibold font-bold text-sm md:text-base flex items-center gap-2 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
-                                    {item.name}
-                                    {!item.completed && getOverloadSuggestion(item.name) && (
-                                      <TrendingUp className="w-3 h-3 text-primary-container animate-pulse" />
-                                    )}
-                                  </div>
-                                  <div className="font-label text-xs text-on-surface-variant tracking-[0.1em]">
-                                    {item.target} | {item.sets} Sets
+                                <div className="flex items-center gap-3">
+                                  <ExerciseVisual name={item.name} target={item.target} />
+                                  <div className="flex flex-col gap-1">
+                                    <div className={`font-sans font-semibold font-bold text-sm md:text-base flex items-center gap-2 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                                      {item.name}
+                                      {!item.completed && getOverloadSuggestion(item.name) && (
+                                        <TrendingUp className="w-3 h-3 text-primary-container animate-pulse" />
+                                      )}
+                                    </div>
+                                    <div className="font-label text-xs text-on-surface-variant tracking-[0.1em]">
+                                      {item.target} | {item.sets} Sets
+                                    </div>
                                   </div>
                                 </div>
                                 
@@ -1936,7 +2016,7 @@ function App() {
 
                                       {/* Sets Inputs */}
                                       <div className="flex flex-col gap-2 mb-3">
-                                        {(item.setData || Array.from({ length: parseInt(item.sets) || 1 }, () => ({ weight: item.weight, reps: item.reps }))).map((set, idx) => (
+                                        {(item.setData || Array.from({ length: parseInt(item.sets) || 1 }, () => ({ weight: '', reps: item.reps }))).map((set, idx) => (
                                           <div key={idx} className="flex items-center gap-3 bg-surface-container-high/50 p-3 rounded-xl">
                                             <span className="font-mono text-xs text-on-surface-variant w-6">#{idx + 1}</span>
                                             <div className="flex flex-col flex-1">
@@ -1945,6 +2025,8 @@ function App() {
                                                 type="text"
                                                 value={set.weight}
                                                 onChange={(e) => updateWorkoutSet(item.id, idx, 'weight', e.target.value)}
+                                                onFocus={(e) => e.target.select()}
+                                                placeholder={item.weight}
                                                 className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-sm focus:outline-none focus:border-primary-container transition-colors"
                                               />
                                             </div>
@@ -1954,6 +2036,8 @@ function App() {
                                                 type="number"
                                                 value={set.reps}
                                                 onChange={(e) => updateWorkoutSet(item.id, idx, 'reps', parseInt(e.target.value) || 0)}
+                                                onFocus={(e) => e.target.select()}
+                                                placeholder={item.reps.toString()}
                                                 className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-sm focus:outline-none focus:border-primary-container transition-colors"
                                               />
                                             </div>
@@ -1980,10 +2064,23 @@ function App() {
                                             <button
                                               key={idx}
                                               onClick={() => {
-                                                const updatedWorkout = workout.map(ex => 
-                                                  ex.id === item.id ? { ...ex, name: sub, substitutions: [item.name, ...item.substitutions.filter(s => s !== sub)] } : ex
-                                                );
+                                                const template = findExerciseTemplate(sub);
+                                                const videoUrl = getExerciseVideoUrlByName(sub) || undefined;
+                                                const updatedWorkout = workout.map(ex => {
+                                                  if (ex.id === item.id) {
+                                                    return {
+                                                      ...ex,
+                                                      name: sub,
+                                                      target: template?.target || ex.target,
+                                                      videoUrl: videoUrl,
+                                                      notes: template?.notes || ex.notes,
+                                                      substitutions: [item.name, ...item.substitutions.filter(s => s !== sub)]
+                                                    };
+                                                  }
+                                                  return ex;
+                                                });
                                                 setWorkout(updatedWorkout);
+                                                triggerCloudSync();
                                               }}
                                               className="text-[10px] bg-surface-container-high/50 hover:bg-primary-container/20 text-on-surface-variant hover:text-primary-container px-3 py-1.5 rounded-lg border border-white/10 transition-all"
                                             >
