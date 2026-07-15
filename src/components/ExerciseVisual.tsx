@@ -78,7 +78,7 @@ const EXERCISE_MAPPING: Record<string, string> = {
   "Nordic Ham Curl": "0117",
   "Seated Leg Curl": "0119",
   "Lying Leg Curl": "0117",
-  "Machine Hip Adduction": "0135",
+  "Machine Hip Adduction": "0157",
   "Cable Hip Adduction": "0135",
   "Copenhagen Hip Adduction": "0135",
   "Hack Squat": "0123",

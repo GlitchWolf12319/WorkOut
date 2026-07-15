@@ -242,6 +242,25 @@ function normalizeSchedule(fetchedSchedule: any): WeeklySchedule {
   return normalizedSchedule;
 }
 
+// Helper to recursively remove any undefined values before sending to Firestore
+function sanitizeFirestoreData(data: any): any {
+  if (data === undefined) return null;
+  if (data === null) return null;
+  if (Array.isArray(data)) {
+    return data.map(sanitizeFirestoreData);
+  }
+  if (typeof data === 'object') {
+    const cleaned: any = {};
+    for (const key of Object.keys(data)) {
+      if (data[key] !== undefined) {
+        cleaned[key] = sanitizeFirestoreData(data[key]);
+      }
+    }
+    return cleaned;
+  }
+  return data;
+}
+
 export default function AppWrapper() {
   return (
     <ErrorBoundary>
@@ -387,8 +406,8 @@ function App() {
       return [];
     }
   });
-  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald'>(() => {
-    return (localStorage.getItem('sovereign_theme') as any) || 'red';
+  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald' | 'spotify'>(() => {
+    return (localStorage.getItem('sovereign_theme') as any) || 'spotify';
   });
 
   useEffect(() => {
@@ -544,7 +563,7 @@ function App() {
           level: 1,
           updatedAt: new Date().toISOString()
         };
-        setDoc(userDocRef, initialData).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`));
+        setDoc(userDocRef, sanitizeFirestoreData(initialData)).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`));
       }
       setIsSyncing(false);
       setHasInitialSyncCompleted(true);
@@ -602,7 +621,7 @@ function App() {
       setIsSyncing(true);
       
       const userDocRef = doc(db, 'users', user.uid);
-      setDoc(userDocRef, {
+      const rawPayload = {
         uid: user.uid,
         workout,
         schedule,
@@ -629,7 +648,9 @@ function App() {
         theme,
         level: Math.floor(exp / 1000) + 1,
         updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(err => {
+      };
+
+      setDoc(userDocRef, sanitizeFirestoreData(rawPayload), { merge: true }).catch(err => {
         console.error("Failed to save to Firestore", err);
         handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
       }).finally(() => {
@@ -2265,7 +2286,7 @@ function App() {
                             const hasIncompleteWorkout = dayEntries.some(e => e.type === 'INCOMPLETE' || e.type === 'BREACH');
                             const isPastDay = day < new Date(new Date().setHours(0, 0, 0, 0));
                             
-                            let dotColorClass = "bg-primary-container shadow-[0_0_5px_rgba(0,229,255,0.5)]"; // default
+                            let dotColorClass = "bg-neutral-500/40 shadow-none"; // default (not happened yet / grey)
                             if (hasCompletedWorkout) {
                               dotColorClass = "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]";
                             } else if (hasIncompleteWorkout || isPastDay) {
@@ -2646,6 +2667,7 @@ function App() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {[
+                  { id: 'spotify', name: 'Spotify Green', color: '#1ed760' },
                   { id: 'red', name: 'Easfly Red', color: '#e54d4d' },
                   { id: 'cyan', name: 'Neon Cyan', color: '#00e5ff' },
                   { id: 'purple', name: 'Void Purple', color: '#9d4edd' },
