@@ -2126,7 +2126,7 @@ function App() {
                                                 onChange={(e) => updateWorkoutSet(item.id, idx, 'weight', e.target.value)}
                                                 onFocus={(e) => e.target.select()}
                                                 placeholder={item.weight}
-                                                className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-sm focus:outline-none focus:border-primary-container transition-colors"
+                                                className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-base md:text-sm focus:outline-none focus:border-primary-container transition-colors"
                                               />
                                             </div>
                                             <div className="flex flex-col flex-1">
@@ -2137,7 +2137,7 @@ function App() {
                                                 onChange={(e) => updateWorkoutSet(item.id, idx, 'reps', parseInt(e.target.value) || 0)}
                                                 onFocus={(e) => e.target.select()}
                                                 placeholder={item.reps.toString()}
-                                                className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-sm focus:outline-none focus:border-primary-container transition-colors"
+                                                className="w-full bg-transparent border-b border-primary-container/20 font-mono text-primary-container text-base md:text-sm focus:outline-none focus:border-primary-container transition-colors"
                                               />
                                             </div>
                                           </div>
@@ -2151,7 +2151,7 @@ function App() {
                                           type="text"
                                           value={item.sets}
                                           onChange={(e) => updateWorkoutItem(item.id, 'sets', e.target.value)}
-                                          className="w-12 bg-surface-container-high/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-xs text-center focus:outline-none focus:border-primary-container transition-colors"
+                                          className="w-12 bg-surface-container-high/30 border-b border-primary-container/20 font-mono text-on-surface-variant text-base md:text-xs text-center focus:outline-none focus:border-primary-container transition-colors"
                                         />
                                       </div>
 
@@ -2983,7 +2983,7 @@ function App() {
                       type="text" 
                       value={editingArchiveEntry.details}
                       onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, details: e.target.value})}
-                      className="w-full bg-surface-container-high border border-white/5 p-3 font-sans font-semibold text-xs   text-on-surface focus:border-primary-container outline-none transition-all"
+                      className="w-full bg-surface-container-high border border-white/5 p-3 font-sans font-semibold text-base md:text-xs   text-on-surface focus:border-primary-container outline-none transition-all"
                     />
                   </div>
                   <div>
@@ -2992,7 +2992,7 @@ function App() {
                       type="number" 
                       value={editingArchiveEntry.duration || 0}
                       onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, duration: parseInt(e.target.value) || 0})}
-                      className="w-full bg-surface-container-high border border-white/5 p-3 font-sans font-semibold text-xs   text-on-surface focus:border-primary-container outline-none transition-all"
+                      className="w-full bg-surface-container-high border border-white/5 p-3 font-sans font-semibold text-base md:text-xs   text-on-surface focus:border-primary-container outline-none transition-all"
                     />
                   </div>
                   <div>
@@ -3000,7 +3000,7 @@ function App() {
                     <select 
                       value={editingArchiveEntry.type}
                       onChange={(e) => setEditingArchiveEntry({...editingArchiveEntry, type: e.target.value as 'COMPLETED' | 'INCOMPLETE' | 'BREACH'})}
-                      className={`w-full bg-surface-container-high border p-3 font-sans font-semibold text-xs   text-on-surface focus:border-primary-container outline-none transition-all ${
+                      className={`w-full bg-surface-container-high border p-3 font-sans font-semibold text-base md:text-xs   text-on-surface focus:border-primary-container outline-none transition-all ${
                         editingArchiveEntry.type === 'BREACH' ? 'border-error/50 text-error' : 'border-white/5'
                       }`}
                     >
@@ -3025,7 +3025,7 @@ function App() {
                               newExercises[exIdx] = { ...ex, name: e.target.value };
                               setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                             }}
-                            className="bg-transparent border-b border-white/5 font-sans font-semibold font-bold   text-sm w-1/2 focus:border-primary-container outline-none"
+                            className="bg-transparent border-b border-white/5 font-sans font-semibold font-bold   text-base md:text-sm w-1/2 focus:border-primary-container outline-none"
                           />
                           <button 
                             onClick={() => {
@@ -3055,7 +3055,7 @@ function App() {
                                       newExercises[exIdx] = { ...ex, setData: newSetData };
                                       setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                     }}
-                                    className="w-20 bg-surface-container-highest border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                    className="w-20 bg-surface-container-highest border border-white/5 p-2 font-mono text-base md:text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                     placeholder="Weight"
                                   />
                                 </div>
@@ -3073,7 +3073,7 @@ function App() {
                                       newExercises[exIdx] = { ...ex, setData: newSetData };
                                       setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                     }}
-                                    className="w-16 bg-surface-container-highest border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                    className="w-16 bg-surface-container-highest border border-white/5 p-2 font-mono text-base md:text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                     placeholder="Reps"
                                   />
                                 </div>
@@ -3114,7 +3114,7 @@ function App() {
                                   newExercises[exIdx] = { ...ex, sets: e.target.value };
                                   setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                 }}
-                                className="w-16 bg-surface-container-highest border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                className="w-16 bg-surface-container-highest border border-white/5 p-2 font-mono text-base md:text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                 placeholder="Sets"
                               />
                             </div>
@@ -3128,7 +3128,7 @@ function App() {
                                   newExercises[exIdx] = { ...ex, weight: e.target.value };
                                   setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                 }}
-                                className="w-24 bg-surface-container-highest border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                className="w-24 bg-surface-container-highest border border-white/5 p-2 font-mono text-base md:text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                 placeholder="Weight"
                               />
                             </div>
@@ -3144,7 +3144,7 @@ function App() {
                                   newExercises[exIdx] = { ...ex, reps: val };
                                   setEditingArchiveEntry({ ...editingArchiveEntry, exercises: newExercises });
                                 }}
-                                className="w-16 bg-surface-container-highest border border-white/5 p-2 font-mono text-xs text-on-surface focus:border-primary-container outline-none text-center"
+                                className="w-16 bg-surface-container-highest border border-white/5 p-2 font-mono text-base md:text-xs text-on-surface focus:border-primary-container outline-none text-center"
                                 placeholder="Reps"
                               />
                             </div>
