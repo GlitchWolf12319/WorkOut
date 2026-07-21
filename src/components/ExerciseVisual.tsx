@@ -386,18 +386,18 @@ export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target }) 
   };
 
   return (
-    <div className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-slate-950/80 border border-white/5 shadow-inner shrink-0 overflow-hidden text-primary-container">
+    <div className="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl bg-surface-container-low border border-primary-container/20 shadow-inner shrink-0 overflow-hidden text-primary-container">
       {!hasError ? (
         <>
           {/* Skeletons/Loading State */}
           {!isLoaded && (
-            <div className="absolute inset-0 bg-slate-950/60 animate-pulse flex items-center justify-center">
+            <div className="absolute inset-0 bg-background/60 animate-pulse flex items-center justify-center">
               <div className="w-4 h-4 rounded-full border-2 border-primary-container border-t-transparent animate-spin" />
             </div>
           )}
 
           {/* 1. Static Custom SVG with bright red highlighted muscle as background layer */}
-          <div className="absolute inset-0 flex items-center justify-center p-1 opacity-70">
+          <div className={`absolute inset-0 flex items-center justify-center p-1.5 opacity-70 transition-opacity duration-300 ${isLoaded ? 'opacity-0' : 'opacity-100'}`}>
             {renderFallbackSVG(true)}
           </div>
 
@@ -408,12 +408,12 @@ export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target }) 
             referrerPolicy="no-referrer"
             onError={handleImageError}
             onLoad={handleImageLoad}
-            className={`absolute inset-0 w-full h-full object-contain p-1.5 transition-opacity duration-300 pointer-events-none select-none ${
-              isLoaded ? 'opacity-85' : 'opacity-0'
+            className={`absolute inset-0 w-full h-full object-contain p-0.5 transition-opacity duration-300 pointer-events-none select-none ${
+              isLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             style={{
-              filter: 'invert(0.9) brightness(1.25) contrast(1.1)',
-              mixBlendMode: 'screen'
+              filter: 'invert(1) hue-rotate(180deg) sepia(0.5) saturate(2) hue-rotate(-20deg) brightness(1.2) contrast(1.3) drop-shadow(0 0 2px rgba(255, 77, 77, 0.4))',
+              mixBlendMode: 'lighten'
             }}
           />
         </>

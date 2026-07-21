@@ -25,7 +25,22 @@
   --animate-spin-slow: spin 3s linear infinite;
 }
 
-:root, :root[data-theme="spotify"] {
+:root, :root[data-theme="wolf"] {
+  --theme-bg: #111111;
+  --theme-surface: #111111;
+  --theme-surface-low: #1a1a1a;
+  --theme-surface-high: #242424;
+  --theme-surface-highest: #2d2d2d;
+  --theme-on-surface: #e5e5e5;
+  --theme-on-surface-variant: #a3a3a3;
+  --theme-primary: #ff4d4d;
+  --theme-primary-container: #b31b1b;
+  --theme-on-primary-container: #ffffff;
+  --theme-outline-variant: #333333;
+  --theme-glow: 255, 77, 77;
+}
+
+:root[data-theme="spotify"] {
   --theme-bg: #121212;
   --theme-surface: #121212;
   --theme-surface-low: #181818;

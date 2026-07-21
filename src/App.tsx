@@ -406,8 +406,8 @@ function App() {
       return [];
     }
   });
-  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald' | 'spotify'>(() => {
-    return (localStorage.getItem('sovereign_theme') as any) || 'spotify';
+  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald' | 'spotify' | 'wolf'>(() => {
+    return (localStorage.getItem('sovereign_theme') as any) || 'wolf';
   });
 
   useEffect(() => {
@@ -887,7 +887,7 @@ function App() {
     { name: 'A', min: 8001, max: 12000, title: 'COMMANDER' },
     { name: 'S', min: 12001, max: 18000, title: 'MONARCH' },
     { name: 'S+', min: 18001, max: 25000, title: 'SHADOW LORD' },
-    { name: 'S++', min: 25001, max: Infinity, title: 'SOVEREIGN' },
+    { name: 'S++', min: 25001, max: Infinity, title: 'ALPHA WOLF' },
   ], []);
 
   const currentRank = useMemo(() => {
@@ -1415,6 +1415,36 @@ function App() {
     return null;
   };
 
+  const getPreviousLiftData = (exerciseName: string) => {
+    const history = archive
+      .filter(e => e.exercises && e.exercises.some(ex => ex.name.toUpperCase() === exerciseName.toUpperCase()))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (history.length === 0) return null;
+
+    // Look for the most recent entry where the exercise itself was marked as completed
+    const lastCompletedExerciseEntry = history.find(e => 
+      e.exercises?.some(ex => ex.name.toUpperCase() === exerciseName.toUpperCase() && ex.completed)
+    );
+
+    // Fallback to the absolute most recent entry containing this exercise if none were marked as completed
+    const targetEntry = lastCompletedExerciseEntry || history[0];
+    if (!targetEntry) return null;
+
+    const pastEx = targetEntry.exercises?.find(ex => ex.name.toUpperCase() === exerciseName.toUpperCase());
+    if (!pastEx) return null;
+
+    return {
+      date: targetEntry.date,
+      dayName: targetEntry.day,
+      weight: pastEx.weight,
+      reps: pastEx.reps,
+      sets: pastEx.sets,
+      setData: pastEx.setData,
+      completed: pastEx.completed
+    };
+  };
+
   const getOverloadSuggestion = (exerciseName: string) => {
     const history = archive
       .filter(e => e.exercises)
@@ -1745,7 +1775,7 @@ function App() {
       {/* Top Navigation */}
       <nav className="fixed top-0 w-full z-50 border-b border-primary-container/15 bg-background/80 backdrop-blur-xl flex justify-between items-center px-4 md:px-8 py-4">
         <div className="text-sm md:text-2xl font-bold  text-primary-container glow-text-primary font-sans font-semibold ">
-          THE SOVEREIGN PROTOCOL
+          THE WOLF PROTOCOL
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden md:flex space-x-8 font-sans font-semibold  text-sm ">
@@ -2028,15 +2058,63 @@ function App() {
                                         </div>
                                       )}
 
-                                      {/* Notes */}
-                                      {item.notes && !item.completed && (
-                                        <div className="mb-3 p-3 bg-primary-container/10 border border-primary-container/20 rounded-xl text-xs text-on-surface leading-relaxed">
-                                          <span className="text-primary-container font-bold mr-1">NOTES:</span> {item.notes}
-                                        </div>
-                                      )}
+                                                                             {/* Notes */}
+                                       {item.notes && !item.completed && (
+                                         <div className="mb-3 p-3 bg-primary-container/10 border border-primary-container/20 rounded-xl text-xs text-on-surface leading-relaxed">
+                                           <span className="text-primary-container font-bold mr-1">NOTES:</span> {item.notes}
+                                         </div>
+                                       )}
 
-                                      {/* Sets Inputs */}
-                                      <div className="flex flex-col gap-2 mb-3">
+                                       {/* Previous Lift History */}
+                                       {(() => {
+                                         const prevLift = getPreviousLiftData(item.name);
+                                         if (!prevLift) return null;
+                                         let formattedDate = prevLift.dayName;
+                                         if (prevLift.date) {
+                                           try {
+                                             formattedDate = format(new Date(prevLift.date), 'MMM d, yyyy');
+                                           } catch (e) {
+                                             // fallback
+                                           }
+                                         }
+                                         return (
+                                           <div className="bg-surface-container-high/40 border border-white/5 p-4 rounded-xl mb-4 text-xs">
+                                             <div className="text-on-surface-variant font-bold mb-2 flex items-center justify-between">
+                                               <span className="flex items-center gap-1.5 font-label tracking-wide text-primary-container">
+                                                 <History className="w-3.5 h-3.5" /> Previous Session Intel
+                                               </span>
+                                               <span className="font-mono text-[10px] text-on-surface-variant/70">
+                                                 {formattedDate}
+                                               </span>
+                                             </div>
+                                             
+                                             <div className="grid grid-cols-1 gap-2.5 mt-2">
+                                               <div className="flex justify-between items-center bg-surface-container-low/40 px-3 py-2 rounded-lg border border-white/5">
+                                                 <span className="font-label text-[10px] text-on-surface-variant/60 tracking-wider">OVERALL BEST</span>
+                                                 <span className="font-mono text-on-surface font-semibold text-right">
+                                                   {prevLift.weight || item.weight} × {prevLift.reps || item.reps} ({prevLift.sets || 1} sets)
+                                                 </span>
+                                               </div>
+                                               
+                                               {prevLift.setData && prevLift.setData.length > 0 && (
+                                                 <div className="bg-surface-container-low/40 p-3 rounded-lg border border-white/5 flex flex-col gap-1.5">
+                                                   <span className="block text-[10px] font-label text-on-surface-variant/60 tracking-wider mb-1">SET-BY-SET TRACKED</span>
+                                                   <div className="flex flex-wrap gap-2">
+                                                     {prevLift.setData.map((set, sIdx) => (
+                                                       <span key={sIdx} className="font-mono text-[11px] px-2 py-1 rounded bg-background/55 border border-white/5 text-primary-container">
+                                                         Set {sIdx + 1}: <strong className="text-on-surface">{set.weight || prevLift.weight || item.weight}</strong> × {set.reps || prevLift.reps || item.reps}
+                                                       </span>
+                                                     ))}
+                                                   </div>
+                                                 </div>
+                                               )}
+                                             </div>
+                                           </div>
+                                         );
+                                       })()}
+
+                                       {/* Sets Inputs */}
+                                       <div className="flex flex-col gap-2 mb-3">
                                         {(item.setData || Array.from({ length: parseInt(item.sets) || 1 }, () => ({ weight: '', reps: item.reps }))).map((set, idx) => (
                                           <div key={idx} className="flex items-center gap-3 bg-surface-container-high/50 p-3 rounded-xl">
                                             <span className="font-mono text-xs text-on-surface-variant w-6">#{idx + 1}</span>
@@ -2667,6 +2745,7 @@ function App() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {[
+                  { id: 'wolf', name: 'Blood Wolf', color: '#ff4d4d' },
                   { id: 'spotify', name: 'Spotify Green', color: '#1ed760' },
                   { id: 'red', name: 'Easfly Red', color: '#e54d4d' },
                   { id: 'cyan', name: 'Neon Cyan', color: '#00e5ff' },
@@ -2711,7 +2790,7 @@ function App() {
               </div>
               
               <p className="text-on-surface-variant text-sm leading-relaxed mb-8  tracking-wide">
-                THIS ACTION WILL PERMANENTLY ERASE ALL ARCHIVED DATA, CURRENT PROGRESS, AND TRAINING SCHEDULES. THIS IS A FACTORY RESET OF THE SOVEREIGN PROTOCOL.
+                THIS ACTION WILL PERMANENTLY ERASE ALL ARCHIVED DATA, CURRENT PROGRESS, AND TRAINING SCHEDULES. THIS IS A FACTORY RESET OF THE WOLF PROTOCOL.
               </p>
 
               <div className="space-y-3">
