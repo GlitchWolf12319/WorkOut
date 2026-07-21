@@ -1977,17 +1977,14 @@ function App() {
                         )}
 
                       <div className="space-y-3 md:space-y-4">
-                        <AnimatePresence mode="popLayout">
+                        <AnimatePresence>
                           {workout.map((item) => (
-                            <motion.div 
+                            <div 
                               key={item.id}
-                              layout
-                              initial={false}
-                              animate={{ opacity: 1, x: 0 }}
-                              className={`group flex flex-col transition-all rounded-2xl mb-3 ${
+                              className={`group flex flex-col rounded-2xl mb-3 border transition-colors ${
                                 item.completed 
-                                  ? 'bg-surface-container-low/50 opacity-60 border border-primary-container/30' 
-                                  : 'bg-surface-container-low border border-white/5 hover:border-primary-container/30'
+                                  ? 'bg-surface-container-low/50 opacity-60 border-primary-container/30' 
+                                  : 'bg-surface-container-low border-white/5 hover:border-primary-container/30'
                               }`}
                             >
                               {/* Header / Summary (Always visible) */}
@@ -2192,7 +2189,7 @@ function App() {
                                   </motion.div>
                                 )}
                               </AnimatePresence>
-                            </motion.div>
+                            </div>
                           ))}
                         </AnimatePresence>
                       </div>
