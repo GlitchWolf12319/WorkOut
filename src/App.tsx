@@ -406,7 +406,7 @@ function App() {
       return [];
     }
   });
-  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald' | 'spotify' | 'wolf'>(() => {
+  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald' | 'spotify' | 'wolf' | 'mint'>(() => {
     return (localStorage.getItem('sovereign_theme') as any) || 'wolf';
   });
 
@@ -2759,6 +2759,7 @@ function App() {
                   { id: 'cyan', name: 'Neon Cyan', color: '#00e5ff' },
                   { id: 'purple', name: 'Void Purple', color: '#9d4edd' },
                   { id: 'emerald', name: 'Matrix Green', color: '#10b981' },
+                  { id: 'mint', name: 'Mint & White', color: '#16a34a' },
                 ].map(t => (
                   <button
                     key={t.id}

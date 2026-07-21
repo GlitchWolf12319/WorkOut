@@ -115,6 +115,21 @@
   --theme-glow: 16, 185, 129;
 }
 
+:root[data-theme="mint"] {
+  --theme-bg: #f9fbf9;
+  --theme-surface: #ffffff;
+  --theme-surface-low: #f1f6f1;
+  --theme-surface-high: #e3ede3;
+  --theme-surface-highest: #d3e2d3;
+  --theme-on-surface: #111d13;
+  --theme-on-surface-variant: #405042;
+  --theme-primary: #16a34a;
+  --theme-primary-container: #15803d;
+  --theme-on-primary-container: #ffffff;
+  --theme-outline-variant: #cbdcd0;
+  --theme-glow: 22, 163, 74;
+}
+
 @layer base {
   body {
     @apply bg-background text-on-surface font-body;
