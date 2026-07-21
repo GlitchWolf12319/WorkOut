@@ -1902,12 +1902,7 @@ function App() {
           <main className="md:ml-64 pt-20 md:pt-24 pb-32 md:pb-12 px-4 md:px-8">
         <div className="max-w-6xl mx-auto space-y-4 md:space-y-12">
           {activeTab === 'Daily Quest' && (
-            <motion.div 
-              initial={{ opacity: 0.85 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.1, ease: 'easeOut' }}
-              className="space-y-6"
-            >
+            <div className="space-y-6">
               {isRestDay ? (
                 <div className="flex flex-col items-center justify-center py-20 border border-dashed border-emerald-500/20 bg-surface-container-low/20 rounded-3xl">
                   <Shield className="w-16 h-16 text-emerald-500/20 mb-4" />
@@ -1987,7 +1982,7 @@ function App() {
                             <motion.div 
                               key={item.id}
                               layout
-                              initial={{ opacity: 0, x: -20 }}
+                              initial={false}
                               animate={{ opacity: 1, x: 0 }}
                               className={`group flex flex-col transition-all rounded-2xl mb-3 ${
                                 item.completed 
@@ -2203,7 +2198,7 @@ function App() {
                       </div>
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'Schedule' && (
