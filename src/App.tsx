@@ -1902,7 +1902,12 @@ function App() {
           <main className="md:ml-64 pt-20 md:pt-24 pb-32 md:pb-12 px-4 md:px-8">
         <div className="max-w-6xl mx-auto space-y-4 md:space-y-12">
           {activeTab === 'Daily Quest' && (
-            <div className="space-y-6">
+            <motion.div 
+              initial={{ opacity: 0.85 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.1, ease: 'easeOut' }}
+              className="space-y-6"
+            >
               {isRestDay ? (
                 <div className="flex flex-col items-center justify-center py-20 border border-dashed border-emerald-500/20 bg-surface-container-low/20 rounded-3xl">
                   <Shield className="w-16 h-16 text-emerald-500/20 mb-4" />
@@ -1996,7 +2001,7 @@ function App() {
                                 onClick={() => toggleExpandedExercise(item.id)}
                               >
                                 <div className="flex items-center gap-3">
-                                  <ExerciseVisual name={item.name} target={item.target} />
+                                  <ExerciseVisual name={item.name} target={item.target} onVideoClick={setActiveVideoUrl} />
                                   <div className="flex flex-col gap-1">
                                     <div className={`font-sans font-semibold font-bold text-sm md:text-base flex items-center gap-2 ${item.completed ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
                                       {item.name}
@@ -2198,13 +2203,14 @@ function App() {
                       </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
 
           {activeTab === 'Schedule' && (
             <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0.85 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.1, ease: 'easeOut' }}
               className="max-w-6xl mx-auto space-y-8"
             >
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 gap-6">
@@ -2572,8 +2578,9 @@ function App() {
           )}
           {activeTab === 'Nutrition' && (
             <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0.85 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.1, ease: 'easeOut' }}
               className="max-w-md mx-auto space-y-4 pb-20"
             >
               {/* Phase Goal Buttons */}
@@ -2674,8 +2681,9 @@ function App() {
 
           {activeTab === 'Video Library' && (
             <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0.85 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.1, ease: 'easeOut' }}
               className="space-y-8"
             >
               <div className="flex items-center justify-between border-b border-white/5 pb-4">

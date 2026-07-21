@@ -5,6 +5,7 @@ import videoTitles from '../../video_titles.json';
 interface ExerciseVisualProps {
   name: string;
   target: string;
+  onVideoClick?: (videoUrl: string) => void;
 }
 
 // Maps exercise names from Jeff Nippard's programs to Everkinetic muscle-highlighted illustration IDs
@@ -257,7 +258,7 @@ const getYouTubeId = (url: string | null | undefined): string | null => {
   return (match && match[2].length === 11) ? match[2] : null;
 };
 
-export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target }) => {
+export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target, onVideoClick }) => {
   const category = getExerciseCategory(name, target);
   
   // Retrieve the Everkinetic exercise ID from mapping or use a fallback
@@ -453,7 +454,15 @@ export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target }) 
 
   if (videoId) {
     return (
-      <div className="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl bg-surface-container-low border border-primary-container/20 shadow-inner shrink-0 overflow-hidden text-primary-container group/video">
+      <div 
+        onClick={(e) => {
+          if (onVideoClick && videoUrl) {
+            e.stopPropagation();
+            onVideoClick(videoUrl);
+          }
+        }}
+        className={`relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl bg-surface-container-low border border-primary-container/20 shadow-inner shrink-0 overflow-hidden text-primary-container group/video ${onVideoClick ? 'cursor-pointer hover:border-primary-container/50 hover:shadow-[0_0_10px_rgba(0,229,255,0.25)]' : ''} transition-all duration-300`}
+      >
         {/* High-Quality YouTube Thumbnail Image */}
         <img
           src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
