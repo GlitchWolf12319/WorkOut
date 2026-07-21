@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { PROGRAMS, WEAKPOINT_MAPPING } from '../data/programs';
+import videoTitles from '../../video_titles.json';
 
 interface ExerciseVisualProps {
   name: string;
@@ -194,6 +196,67 @@ const getFallbackId = (category: string): string => {
   }
 };
 
+const findExerciseTemplate = (exName: string) => {
+  for (const program of PROGRAMS) {
+    for (const range in program.weeks) {
+      for (const day in program.weeks[range].days) {
+        const exercise = program.weeks[range].days[day].find(e => e.name === exName);
+        if (exercise) return exercise;
+      }
+    }
+  }
+  for (const wp in WEAKPOINT_MAPPING) {
+    const option = WEAKPOINT_MAPPING[wp];
+    if (option.ex1.name === exName) return option.ex1;
+    if (option.ex2.name === exName) return option.ex2;
+  }
+  return null;
+};
+
+const getExerciseVideoUrl = (exName: string) => {
+  for (const program of PROGRAMS) {
+    for (const range in program.weeks) {
+      for (const day in program.weeks[range].days) {
+        const exercise = program.weeks[range].days[day].find(e => e.name === exName);
+        if (exercise && exercise.videoUrl) return exercise.videoUrl;
+      }
+    }
+  }
+  return null;
+};
+
+const getExerciseVideoUrlByName = (exName: string) => {
+  // 1. Check template
+  const template = findExerciseTemplate(exName);
+  if (template && template.videoUrl) return template.videoUrl;
+
+  // 2. Check program
+  const programUrl = getExerciseVideoUrl(exName);
+  if (programUrl) return programUrl;
+
+  // 3. Search in video_titles.json
+  try {
+    const normalizedExName = exName.trim().toLowerCase();
+    const match = Object.entries(videoTitles).find(([id, name]) => 
+      (name as string).trim().toLowerCase() === normalizedExName
+    );
+    if (match) {
+      return `https://www.youtube.com/watch?v=${match[0]}`;
+    }
+  } catch (e) {
+    console.error("Error looking up video by name in video_titles.json", e);
+  }
+
+  return null;
+};
+
+const getYouTubeId = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
 export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target }) => {
   const category = getExerciseCategory(name, target);
   
@@ -384,6 +447,47 @@ export const ExerciseVisual: React.FC<ExerciseVisualProps> = ({ name, target }) 
         );
     }
   };
+
+  const videoUrl = getExerciseVideoUrlByName(name);
+  const videoId = getYouTubeId(videoUrl);
+
+  if (videoId) {
+    return (
+      <div className="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl bg-surface-container-low border border-primary-container/20 shadow-inner shrink-0 overflow-hidden text-primary-container group/video">
+        {/* High-Quality YouTube Thumbnail Image */}
+        <img
+          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+          alt={name}
+          className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover/video:opacity-100 transition-all duration-300 group-hover/video:scale-105"
+          onError={(e) => {
+            const img = e.target as HTMLImageElement;
+            if (img.src.includes('mqdefault.jpg')) {
+              img.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            } else if (img.src.includes('hqdefault.jpg')) {
+              img.src = `https://img.youtube.com/vi/${videoId}/0.jpg`;
+            }
+          }}
+        />
+        
+        {/* Dark overlay vignette */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 group-hover/video:from-black/40 transition-colors duration-300" />
+
+        {/* Small, elegant, non-obstructive play icon */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-6 h-6 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-md transform group-hover/video:scale-110 transition-transform duration-300">
+            <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 text-primary-container fill-primary-container ml-0.5">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Small corner tutorial badge */}
+        <span className="absolute top-1 right-1 font-mono text-[8px] font-bold px-1 py-0.5 bg-primary-container/90 text-on-primary-container rounded-sm leading-none select-none">
+          TUTORIAL
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-xl bg-surface-container-low border border-primary-container/20 shadow-inner shrink-0 overflow-hidden text-primary-container">
