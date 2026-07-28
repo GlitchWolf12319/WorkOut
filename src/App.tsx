@@ -1081,10 +1081,19 @@ function App() {
         const hasIdChanges = toRemove.length > 0 || todaySchedule.exercises.some(ex => !workoutIds.includes(ex.id));
         const hasPropertyChanges = todaySchedule.exercises.some(schedEx => {
           const existing = prev.find(p => p.id === schedEx.id);
-          return existing && (
-            existing.name !== schedEx.name ||
-            existing.weight !== schedEx.weight ||
-            existing.reps !== schedEx.reps ||
+          if (!existing) return false;
+          const isSubstituted = Boolean(
+            existing.isSubstituted ||
+            (existing.name !== schedEx.name && (
+              schedEx.substitutions?.includes(existing.name) ||
+              existing.substitutions?.includes(schedEx.name)
+            ))
+          );
+          const nameChangedInSchedule = existing.name !== schedEx.name && !isSubstituted;
+          return (
+            nameChangedInSchedule ||
+            (!isSubstituted && existing.weight !== schedEx.weight) ||
+            (!isSubstituted && existing.reps !== schedEx.reps) ||
             existing.sets !== schedEx.sets
           );
         });
@@ -1097,10 +1106,19 @@ function App() {
         const removedCompleted = toRemove.filter(ex => ex.completed);
         const changedCompleted = todaySchedule.exercises.filter(schedEx => {
           const existing = prev.find(p => p.id === schedEx.id);
-          return existing && existing.completed && (
-            existing.name !== schedEx.name ||
-            existing.weight !== schedEx.weight ||
-            existing.reps !== schedEx.reps ||
+          if (!existing || !existing.completed) return false;
+          const isSubstituted = Boolean(
+            existing.isSubstituted ||
+            (existing.name !== schedEx.name && (
+              schedEx.substitutions?.includes(existing.name) ||
+              existing.substitutions?.includes(schedEx.name)
+            ))
+          );
+          const nameChangedInSchedule = existing.name !== schedEx.name && !isSubstituted;
+          return (
+            nameChangedInSchedule ||
+            (!isSubstituted && existing.weight !== schedEx.weight) ||
+            (!isSubstituted && existing.reps !== schedEx.reps) ||
             existing.sets !== schedEx.sets
           );
         });
@@ -1114,24 +1132,41 @@ function App() {
         return todaySchedule.exercises.map(schedEx => {
           const existingEx = prev.find(p => p.id === schedEx.id);
           if (existingEx) {
+            const isSubstituted = Boolean(
+              existingEx.isSubstituted ||
+              (existingEx.name !== schedEx.name && (
+                schedEx.substitutions?.includes(existingEx.name) ||
+                existingEx.substitutions?.includes(schedEx.name)
+              ))
+            );
             const isChanged = (
-              existingEx.name !== schedEx.name ||
-              existingEx.weight !== schedEx.weight ||
-              existingEx.reps !== schedEx.reps ||
+              (existingEx.name !== schedEx.name && !isSubstituted) ||
+              (!isSubstituted && existingEx.weight !== schedEx.weight) ||
+              (!isSubstituted && existingEx.reps !== schedEx.reps) ||
               existingEx.sets !== schedEx.sets
             );
+
+            const combinedSubstitutions = getExerciseSubstitutions(
+              isSubstituted ? existingEx.name : schedEx.name,
+              [...(schedEx.substitutions || []), ...(existingEx.substitutions || [])]
+            );
+
             return {
+              ...schedEx,
               ...existingEx,
+              name: isSubstituted ? existingEx.name : (isChanged ? schedEx.name : existingEx.name),
+              target: isSubstituted ? existingEx.target : (isChanged ? schedEx.target : existingEx.target),
+              videoUrl: isSubstituted ? existingEx.videoUrl : (isChanged ? schedEx.videoUrl : existingEx.videoUrl),
+              notes: isSubstituted ? existingEx.notes : (isChanged ? schedEx.notes : existingEx.notes),
+              substitutions: combinedSubstitutions,
+              isSubstituted: isSubstituted,
               completed: isChanged ? false : existingEx.completed,
-              name: schedEx.name,
-              target: schedEx.target,
-              weight: schedEx.weight,
-              reps: schedEx.reps,
-              sets: schedEx.sets,
-              // Keep setData if sets count matches and not changed
-              setData: !isChanged && existingEx.setData && existingEx.setData.length === parseInt(schedEx.sets)
+              weight: isChanged && !isSubstituted ? schedEx.weight : existingEx.weight,
+              reps: isChanged && !isSubstituted ? schedEx.reps : existingEx.reps,
+              sets: isChanged ? schedEx.sets : existingEx.sets,
+              setData: (!isChanged || isSubstituted) && existingEx.setData && existingEx.setData.length === parseInt(existingEx.sets || schedEx.sets)
                 ? existingEx.setData
-                : undefined
+                : (isChanged ? undefined : existingEx.setData)
             };
           }
           // New exercise
@@ -1158,7 +1193,7 @@ function App() {
         return [];
       });
     }
-  }, [schedule, archive]);
+  }, [schedule]);
 
   // Keep archive in sync with today's workout state
   useEffect(() => {
@@ -1374,20 +1409,120 @@ function App() {
   };
 
   const findExerciseTemplate = (exName: string) => {
+    if (!exName) return null;
+    const lowerName = exName.trim().toLowerCase();
     for (const program of PROGRAMS) {
       for (const range in program.weeks) {
         for (const day in program.weeks[range].days) {
-          const exercise = program.weeks[range].days[day].find(e => e.name === exName);
+          const exercise = program.weeks[range].days[day].find(e => e.name && e.name.trim().toLowerCase() === lowerName);
           if (exercise) return exercise;
         }
       }
     }
     for (const wp in WEAKPOINT_MAPPING) {
       const option = WEAKPOINT_MAPPING[wp];
-      if (option.ex1.name === exName) return option.ex1;
-      if (option.ex2.name === exName) return option.ex2;
+      if (option.ex1.name && option.ex1.name.trim().toLowerCase() === lowerName) return option.ex1;
+      if (option.ex2.name && option.ex2.name.trim().toLowerCase() === lowerName) return option.ex2;
     }
     return null;
+  };
+
+  const getExerciseSubstitutions = (exName: string, itemSubstitutions?: string[]): string[] => {
+    if (!exName) return [];
+
+    const adj = new Map<string, Set<string>>();
+
+    const addEdge = (a?: string, b?: string) => {
+      if (!a || !b) return;
+      const cleanA = a.trim();
+      const cleanB = b.trim();
+      if (!cleanA || !cleanB || cleanA.toLowerCase() === cleanB.toLowerCase()) return;
+      if (
+        cleanA.includes('Warm-Up') || cleanB.includes('Warm-Up') ||
+        cleanA.includes('Weak Point') || cleanB.includes('Weak Point') ||
+        cleanA.includes('See The Weak Point') || cleanB.includes('See The Weak Point')
+      ) return;
+
+      if (!adj.has(cleanA)) adj.set(cleanA, new Set());
+      if (!adj.has(cleanB)) adj.set(cleanB, new Set());
+
+      adj.get(cleanA)!.add(cleanB);
+      adj.get(cleanB)!.add(cleanA);
+    };
+
+    // 1. Populate edges from PROGRAMS
+    for (const program of PROGRAMS) {
+      for (const range in program.weeks) {
+        for (const day in program.weeks[range].days) {
+          for (const exercise of program.weeks[range].days[day]) {
+            if (exercise.name && exercise.substitutions) {
+              for (const sub of exercise.substitutions) {
+                addEdge(exercise.name, sub);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Populate edges from WEAKPOINT_MAPPING
+    for (const wp in WEAKPOINT_MAPPING) {
+      const opt = WEAKPOINT_MAPPING[wp];
+      if (opt.ex1.name && opt.ex1.substitutions) {
+        for (const sub of opt.ex1.substitutions) {
+          addEdge(opt.ex1.name, sub);
+        }
+      }
+      if (opt.ex2.name && opt.ex2.substitutions) {
+        for (const sub of opt.ex2.substitutions) {
+          addEdge(opt.ex2.name, sub);
+        }
+      }
+    }
+
+    // 3. Populate extra substitutions passed in
+    if (itemSubstitutions && Array.isArray(itemSubstitutions)) {
+      for (const sub of itemSubstitutions) {
+        addEdge(exName, sub);
+      }
+    }
+
+    // Traverse the graph starting from exName
+    const cleanedExName = exName.trim();
+    const visitedKeys = new Map<string, string>();
+    const queue: string[] = [cleanedExName];
+    if (itemSubstitutions && Array.isArray(itemSubstitutions)) {
+      for (const s of itemSubstitutions) {
+        if (s && typeof s === 'string') queue.push(s.trim());
+      }
+    }
+
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const currKey = curr.toLowerCase();
+      if (visitedKeys.has(currKey)) continue;
+      visitedKeys.set(currKey, curr);
+
+      for (const [node, neighbors] of adj.entries()) {
+        if (node.toLowerCase() === currKey) {
+          for (const neighbor of neighbors) {
+            if (!visitedKeys.has(neighbor.toLowerCase())) {
+              queue.push(neighbor);
+            }
+          }
+        }
+      }
+    }
+
+    const targetKey = cleanedExName.toLowerCase();
+    const results: string[] = [];
+    for (const [key, original] of visitedKeys.entries()) {
+      if (key !== targetKey) {
+        results.push(original);
+      }
+    }
+
+    return results.sort((a, b) => a.localeCompare(b));
   };
 
   const getExerciseVideoUrlByName = (exName: string) => {
@@ -1564,8 +1699,10 @@ function App() {
               updatedEx = { ...updatedEx, ...WEAKPOINT_MAPPING[weakpoint].ex2 };
             }
           }
+          const fullSubs = getExerciseSubstitutions(updatedEx.name, updatedEx.substitutions);
           return {
             ...updatedEx,
+            substitutions: fullSubs,
             id: Math.random().toString(36).substr(2, 9),
             completed: false
           };
@@ -2153,38 +2290,87 @@ function App() {
                                       </div>
 
                                       {/* Substitutions */}
-                                      {item.substitutions && item.substitutions.length > 0 && !item.completed && (
-                                        <div className="flex flex-wrap gap-2">
-                                          <div className="text-[10px] text-on-surface-variant w-full mb-1">Substitutions:</div>
-                                          {item.substitutions.map((sub, idx) => (
-                                            <button
-                                              key={idx}
-                                              onClick={() => {
-                                                const template = findExerciseTemplate(sub);
-                                                const videoUrl = getExerciseVideoUrlByName(sub) || undefined;
-                                                const updatedWorkout = workout.map(ex => {
-                                                  if (ex.id === item.id) {
-                                                    return {
-                                                      ...ex,
-                                                      name: sub,
-                                                      target: template?.target || ex.target,
-                                                      videoUrl: videoUrl,
-                                                      notes: template?.notes || ex.notes,
-                                                      substitutions: [item.name, ...item.substitutions.filter(s => s !== sub)]
-                                                    };
+                                      {(() => {
+                                        const availableSubs = getExerciseSubstitutions(item.name, item.substitutions);
+                                        if (availableSubs.length === 0 || item.completed) return null;
+                                        return (
+                                          <div className="flex flex-wrap gap-2">
+                                            <div className="text-[10px] text-on-surface-variant w-full mb-1">Substitutions:</div>
+                                            {availableSubs.map((sub, idx) => (
+                                              <button
+                                                key={idx}
+                                                onClick={() => {
+                                                  const template = findExerciseTemplate(sub);
+                                                  const videoUrl = getExerciseVideoUrlByName(sub) || undefined;
+                                                  const newSubstitutions = getExerciseSubstitutions(sub, [item.name, ...(item.substitutions || []), ...availableSubs]);
+
+                                                  // 1. Update active workout state
+                                                  const updatedWorkout = workout.map(ex => {
+                                                    if (ex.id === item.id) {
+                                                      return {
+                                                        ...ex,
+                                                        name: sub,
+                                                        target: template?.target || ex.target,
+                                                        videoUrl: videoUrl,
+                                                        notes: template?.notes || ex.notes,
+                                                        substitutions: newSubstitutions,
+                                                        isSubstituted: true
+                                                      };
+                                                    }
+                                                    return ex;
+                                                  });
+                                                  setWorkout(updatedWorkout);
+
+                                                  // 2. Persist substitution in schedule state & localStorage so it never resets
+                                                  if (Object.keys(schedule).length > 0) {
+                                                    const currentDayName = getProgramCurrentDay();
+                                                    const currentWeekNum = getProgramCurrentCycle();
+
+                                                    setSchedule(prevSchedule => {
+                                                      const weekSchedule = prevSchedule[currentWeekNum] || prevSchedule[1];
+                                                      if (!weekSchedule) return prevSchedule;
+
+                                                      const newWeekSchedule = weekSchedule.map(daySched => {
+                                                        if (daySched.day === currentDayName) {
+                                                          const updatedExercises = daySched.exercises.map(ex => {
+                                                            if (ex.id === item.id) {
+                                                              return {
+                                                                ...ex,
+                                                                name: sub,
+                                                                target: template?.target || ex.target,
+                                                                videoUrl: videoUrl,
+                                                                notes: template?.notes || ex.notes,
+                                                                substitutions: newSubstitutions,
+                                                                isSubstituted: true
+                                                              };
+                                                            }
+                                                            return ex;
+                                                          });
+                                                          return { ...daySched, exercises: updatedExercises };
+                                                        }
+                                                        return daySched;
+                                                      });
+
+                                                      const updatedSchedule = { ...prevSchedule, [currentWeekNum]: newWeekSchedule };
+                                                      try {
+                                                        localStorage.setItem('sovereign_schedule', JSON.stringify(updatedSchedule));
+                                                      } catch (e) {
+                                                        console.error("Failed to save schedule to localStorage", e);
+                                                      }
+                                                      return updatedSchedule;
+                                                    });
                                                   }
-                                                  return ex;
-                                                });
-                                                setWorkout(updatedWorkout);
-                                                triggerCloudSync();
-                                              }}
-                                              className="text-[10px] bg-surface-container-high/50 hover:bg-primary-container/20 text-on-surface-variant hover:text-primary-container px-3 py-1.5 rounded-lg border border-white/10 transition-all"
-                                            >
-                                              Swap: {sub}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
+
+                                                  triggerCloudSync();
+                                                }}
+                                                className="text-[10px] bg-surface-container-high/50 hover:bg-primary-container/20 text-on-surface-variant hover:text-primary-container px-3 py-1.5 rounded-lg border border-white/10 transition-all"
+                                              >
+                                                Swap: {sub}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   </motion.div>
                                 )}

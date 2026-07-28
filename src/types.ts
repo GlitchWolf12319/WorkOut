@@ -14,6 +14,8 @@ export interface WorkoutItem {
   completed: boolean;
   notes?: string;
   videoUrl?: string;
+  substitutions?: string[];
+  isSubstituted?: boolean;
 }
 
 export interface ScheduleDay {

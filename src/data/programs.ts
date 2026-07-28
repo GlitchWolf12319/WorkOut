@@ -389,7 +389,7 @@ export const PROGRAMS: Program[] = [
               "notes": "Place both palms under the head of a dumbbell and perform overhead extensions. Feel a deep stretch on your triceps at the bottom. Avoid pausing at the top of each rep.",
               "videoUrl": "https://www.youtube.com/watch?v=5KX0EjOTMaI",
               "substitutions": [
-                "EZ-bar Skull Crusher",
+                "EZ-Bar Skull Crusher",
                 "DB Skull Crusher"
               ]
             },
@@ -1110,7 +1110,7 @@ export const PROGRAMS: Program[] = [
               "notes": "Place both palms under the head of a dumbbell and perform overhead extensions. Feel a deep stretch on your triceps at the bottom. Avoid pausing at the top of each rep.",
               "videoUrl": "https://www.youtube.com/watch?v=5KX0EjOTMaI",
               "substitutions": [
-                "EZ-bar Skull Crusher",
+                "EZ-Bar Skull Crusher",
                 "DB Skull Crusher"
               ]
             },
@@ -1831,7 +1831,7 @@ export const PROGRAMS: Program[] = [
               "notes": "Place both palms under the head of a dumbbell and perform overhead extensions. Feel a deep stretch on your triceps at the bottom. Avoid pausing at the top of each rep.",
               "videoUrl": "https://www.youtube.com/watch?v=5KX0EjOTMaI",
               "substitutions": [
-                "EZ-bar Skull Crusher",
+                "EZ-Bar Skull Crusher",
                 "DB Skull Crusher"
               ]
             },
@@ -2552,7 +2552,7 @@ export const PROGRAMS: Program[] = [
               "notes": "Place both palms under the head of a dumbbell and perform overhead extensions. Feel a deep stretch on your triceps at the bottom. Avoid pausing at the top of each rep.",
               "videoUrl": "https://www.youtube.com/watch?v=5KX0EjOTMaI",
               "substitutions": [
-                "EZ-bar Skull Crusher",
+                "EZ-Bar Skull Crusher",
                 "DB Skull Crusher"
               ]
             },
@@ -3273,7 +3273,7 @@ export const PROGRAMS: Program[] = [
               "notes": "Place both palms under the head of a dumbbell and perform overhead extensions. Feel a deep stretch on your triceps at the bottom. Avoid pausing at the top of each rep.",
               "videoUrl": "https://www.youtube.com/watch?v=5KX0EjOTMaI",
               "substitutions": [
-                "EZ-bar Skull Crusher",
+                "EZ-Bar Skull Crusher",
                 "DB Skull Crusher"
               ]
             },
