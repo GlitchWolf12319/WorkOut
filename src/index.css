@@ -40,6 +40,21 @@
   --theme-glow: 255, 77, 77;
 }
 
+:root[data-theme="blue"] {
+  --theme-bg: #070c18;
+  --theme-surface: #070c18;
+  --theme-surface-low: #0f172a;
+  --theme-surface-high: #1e293b;
+  --theme-surface-highest: #334155;
+  --theme-on-surface: #f8fafc;
+  --theme-on-surface-variant: #94a3b8;
+  --theme-primary: #93c5fd;
+  --theme-primary-container: #3b82f6;
+  --theme-on-primary-container: #ffffff;
+  --theme-outline-variant: #1e293b;
+  --theme-glow: 59, 130, 246;
+}
+
 :root[data-theme="spotify"] {
   --theme-bg: #121212;
   --theme-surface: #121212;

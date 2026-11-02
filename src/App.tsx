@@ -406,9 +406,35 @@ function App() {
       return [];
     }
   });
-  const [theme, setTheme] = useState<'red' | 'cyan' | 'purple' | 'emerald' | 'spotify' | 'wolf' | 'mint'>(() => {
-    return (localStorage.getItem('sovereign_theme') as any) || 'wolf';
+type ThemeType = 'blue' | 'cyan' | 'wolf' | 'red' | 'purple' | 'emerald' | 'spotify' | 'mint';
+
+  const [theme, setTheme] = useState<ThemeType>(() => {
+    return (localStorage.getItem('sovereign_theme') as any) || 'blue';
   });
+
+  const handleThemeChange = (newTheme: ThemeType) => {
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    try {
+      localStorage.setItem('sovereign_theme', newTheme);
+      localStorage.setItem('sovereign_theme_updated_at', Date.now().toString());
+    } catch (e) {
+      console.error("Failed to save theme to localStorage", e);
+    }
+
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      setDoc(userDocRef, {
+        theme: newTheme,
+        themeUpdatedAt: Date.now(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(err => {
+        console.error("Failed to sync theme to Firestore", err);
+      });
+    }
+
+    triggerCloudSync();
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -532,7 +558,18 @@ function App() {
         setCustomScheduleStartDate(prev => (data.customScheduleStartDate !== undefined && prev !== data.customScheduleStartDate) ? data.customScheduleStartDate : prev);
         setBodyFat(prev => (data.bodyFat !== undefined && prev !== data.bodyFat) ? data.bodyFat : prev);
         setCardioCompleted(prev => (data.cardioCompleted !== undefined && prev !== data.cardioCompleted) ? data.cardioCompleted : prev);
-        setTheme(prev => (data.theme !== undefined && prev !== data.theme) ? data.theme : prev);
+        if (data.theme !== undefined) {
+          const localUpdateStr = localStorage.getItem('sovereign_theme_updated_at');
+          const localUpdatedAt = localUpdateStr ? parseInt(localUpdateStr) : 0;
+          const isRecentLocalChange = Date.now() - localUpdatedAt < 15000;
+          const localSavedTheme = localStorage.getItem('sovereign_theme') as ThemeType | null;
+
+          if (isRecentLocalChange && localSavedTheme && localSavedTheme !== data.theme) {
+            setDoc(userDocRef, { theme: localSavedTheme, themeUpdatedAt: localUpdatedAt, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+          } else {
+            setTheme(data.theme);
+          }
+        }
       } else {
         // First time user - initialize Firestore with local data or defaults
         const initialData = {
@@ -695,7 +732,7 @@ function App() {
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [timeLeftInDay, setTimeLeftInDay] = useState('');
   const [scheduleMonth, setScheduleMonth] = useState(new Date());
-  const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(null);
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState<Date | null>(() => new Date());
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [isRestDayModalOpen, setIsRestDayModalOpen] = useState(false);
   const [isWorkoutInitModalOpen, setIsWorkoutInitModalOpen] = useState(false);
@@ -1197,32 +1234,57 @@ function App() {
 
   // Keep archive in sync with today's workout state
   useEffect(() => {
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
     const todayEntry = archive.find(e => e.date === todayStr);
-    if (!todayEntry) return;
 
-    // Sync Archive with Workout State
-    const entryIds = todayEntry.exercises?.map(ex => ex.id).sort().join(',') || '';
-    const workoutIds = workout.map(ex => ex.id).sort().join(',');
-    const currentProgress = workout.length > 0 ? Math.round((workout.filter(ex => ex.completed).length / workout.length) * 100) : 100;
+    const completedCount = workout.filter(ex => ex.completed).length;
+    const hasAnyCompleted = completedCount > 0;
+    const currentProgress = workout.length > 0 ? Math.round((completedCount / workout.length) * 100) : 100;
+    const isFullyCompleted = workout.length > 0 && completedCount === workout.length;
+    const dayName = getProgramCurrentDay() || DAYS[today.getDay() === 0 ? 6 : today.getDay() - 1];
 
-    if (entryIds !== workoutIds || todayEntry.progress !== currentProgress || todayEntry.cardioCompleted !== cardioCompleted) {
-      setArchive(prev => {
-        const filtered = prev.filter(e => e.date !== todayStr);
-        const updatedEntry: ArchiveEntry = {
-          ...todayEntry,
-          exercises: [...workout],
-          progress: currentProgress,
-          cardioCompleted: cardioCompleted,
-          type: (currentProgress === 100 && cardioCompleted) ? 'COMPLETED' : 'BREACH',
-          details: (currentProgress === 100 && cardioCompleted)
-            ? `Protocol Secured: ${todayEntry.day} Cycle` 
-            : `Protocol Breach: ${todayEntry.day} Cycle (${currentProgress}% Progress, Cardio: ${cardioCompleted ? 'OK' : 'MISSING'})`
-        };
-        return [updatedEntry, ...filtered];
-      });
+    if (todayEntry) {
+      // Sync Archive with Workout State
+      const entryIds = todayEntry.exercises?.map(ex => ex.id).sort().join(',') || '';
+      const workoutIds = workout.map(ex => ex.id).sort().join(',');
+      const prevCompletedIds = todayEntry.exercises?.filter(ex => ex.completed).map(ex => ex.id).sort().join(',') || '';
+      const currentCompletedIds = workout.filter(ex => ex.completed).map(ex => ex.id).sort().join(',');
+
+      if (entryIds !== workoutIds || prevCompletedIds !== currentCompletedIds || todayEntry.progress !== currentProgress || todayEntry.cardioCompleted !== cardioCompleted) {
+        setArchive(prev => {
+          const filtered = prev.filter(e => e.date !== todayStr);
+          const updatedEntry: ArchiveEntry = {
+            ...todayEntry,
+            exercises: [...workout],
+            progress: currentProgress,
+            cardioCompleted: cardioCompleted,
+            type: isFullyCompleted ? 'COMPLETED' : (todayEntry.type === 'BREACH' && !hasAnyCompleted ? 'BREACH' : 'INCOMPLETE'),
+            details: isFullyCompleted
+              ? `Protocol Secured: ${todayEntry.day || dayName} Cycle` 
+              : `Protocol In Progress: ${todayEntry.day || dayName} Cycle (${currentProgress}%)`
+          };
+          return [updatedEntry, ...filtered];
+        });
+      }
+    } else if (hasAnyCompleted) {
+      // Automatically record in archive when tasks are completed so schedule reflects it
+      const newEntry: ArchiveEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        date: todayStr,
+        day: dayName,
+        type: isFullyCompleted ? 'COMPLETED' : 'INCOMPLETE',
+        details: isFullyCompleted
+          ? `Protocol Secured: ${dayName} Cycle` 
+          : `Protocol In Progress: ${dayName} Cycle (${currentProgress}%)`,
+        exercises: [...workout],
+        progress: currentProgress,
+        cardioCompleted: cardioCompleted,
+        duration: timer
+      };
+      setArchive(prev => [newEntry, ...prev.filter(e => e.date !== todayStr)]);
     }
-  }, [workout, archive, cardioCompleted]);
+  }, [workout, archive, cardioCompleted, timer]);
 
   const logWorkout = useCallback(() => {
     const today = new Date();
@@ -1356,8 +1418,143 @@ function App() {
     const expChange = newCompleted ? 100 : -100;
 
     setWorkout(prev => prev.map(i => i.id === id ? { ...i, completed: newCompleted } : i));
-    setExp(prev => prev + expChange);
+    setExp(prev => Math.max(0, prev + expChange));
+
+    // Keep schedule state synchronized with workout task completions
+    if (Object.keys(schedule).length > 0) {
+      const currentDayName = getProgramCurrentDay();
+      const currentWeekNum = getProgramCurrentCycle();
+
+      setSchedule(prevSchedule => {
+        const weekSchedule = prevSchedule[currentWeekNum] || prevSchedule[1];
+        if (!weekSchedule) return prevSchedule;
+
+        const newWeekSchedule = weekSchedule.map(daySched => {
+          if (daySched.day === currentDayName) {
+            const updatedExercises = daySched.exercises.map(ex => {
+              if (ex.id === id || ex.name.toUpperCase() === item.name.toUpperCase()) {
+                return { ...ex, completed: newCompleted };
+              }
+              return ex;
+            });
+            return { ...daySched, exercises: updatedExercises };
+          }
+          return daySched;
+        });
+
+        const updatedSchedule = { ...prevSchedule, [currentWeekNum]: newWeekSchedule };
+        try {
+          localStorage.setItem('sovereign_schedule', JSON.stringify(updatedSchedule));
+        } catch (e) {
+          console.error("Failed to save schedule to localStorage", e);
+        }
+        return updatedSchedule;
+      });
+    }
+
     triggerCloudSync();
+  };
+
+  const toggleScheduleExercise = (exerciseId: string, exName: string) => {
+    if (!selectedScheduleDate) return;
+    const isSelectedToday = isSameDay(selectedScheduleDate, new Date());
+
+    if (isSelectedToday) {
+      // Find matching item in today's active workout
+      const targetItem = workout.find(i => i.id === exerciseId || i.name.toUpperCase() === exName.toUpperCase());
+      if (targetItem) {
+        toggleComplete(targetItem.id);
+        return;
+      }
+    }
+
+    const dateStr = format(selectedScheduleDate, 'yyyy-MM-dd');
+    const existingArchive = archive.find(e => e.date === dateStr);
+
+    if (existingArchive) {
+      let toggledTo = false;
+      const updatedExercises = (existingArchive.exercises || []).map(ex => {
+        if (ex.id === exerciseId || ex.name.toUpperCase() === exName.toUpperCase()) {
+          toggledTo = !ex.completed;
+          return { ...ex, completed: toggledTo };
+        }
+        return ex;
+      });
+
+      const foundInArchive = (existingArchive.exercises || []).some(ex => ex.id === exerciseId || ex.name.toUpperCase() === exName.toUpperCase());
+      if (!foundInArchive) {
+        toggledTo = true;
+        updatedExercises.push({
+          id: exerciseId,
+          name: exName,
+          target: '',
+          weight: '',
+          reps: 0,
+          sets: '1',
+          completed: true
+        });
+      }
+
+      const completedCount = updatedExercises.filter(ex => ex.completed).length;
+      const progress = updatedExercises.length > 0 ? Math.round((completedCount / updatedExercises.length) * 100) : 100;
+      const updatedEntry: ArchiveEntry = {
+        ...existingArchive,
+        exercises: updatedExercises,
+        progress: progress,
+        type: progress === 100 ? 'COMPLETED' : 'INCOMPLETE',
+        details: progress === 100 
+          ? `Protocol Secured: ${existingArchive.day} Cycle` 
+          : `Protocol In Progress: ${existingArchive.day} Cycle (${progress}%)`
+      };
+
+      setExp(prev => Math.max(0, prev + (toggledTo ? 100 : -100)));
+      saveArchiveEdit(updatedEntry);
+      triggerCloudSync();
+    } else {
+      // Create new archive entry for this day with this task marked completed
+      const diffDays = differenceInDays(selectedScheduleDate, parseISO(programStartDate));
+      const program = PROGRAMS.find(p => p.id === selectedProgramId);
+      const cycleLen = program ? Object.keys(program.dayLabels || {}).length : 7;
+      const dayIndex = ((diffDays % cycleLen) + cycleLen) % cycleLen;
+      const dayName = DAYS[dayIndex] || 'Day 1';
+      const mappedDay = dayMapping[dayName] || dayName;
+
+      let weekData = null;
+      const weekNum = Math.floor(diffDays / cycleLen) + 1;
+      for (const range in program?.weeks || {}) {
+        const [start, end] = range.split('-').map(Number);
+        if (end ? (weekNum >= start && weekNum <= end) : (weekNum === start)) {
+          weekData = program?.weeks[range];
+          break;
+        }
+      }
+      const baseExercises = weekData?.days[mappedDay] || [];
+      const newExercises = baseExercises.map(ex => {
+        if (ex.id === exerciseId || ex.name.toUpperCase() === exName.toUpperCase()) {
+          return { ...ex, completed: true };
+        }
+        return { ...ex, completed: false };
+      });
+
+      const completedCount = newExercises.filter(ex => ex.completed).length;
+      const progress = newExercises.length > 0 ? Math.round((completedCount / newExercises.length) * 100) : 100;
+
+      const newEntry: ArchiveEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        date: dateStr,
+        day: dayName,
+        type: progress === 100 ? 'COMPLETED' : 'INCOMPLETE',
+        details: progress === 100 
+          ? `Protocol Secured: ${dayName} Cycle` 
+          : `Protocol In Progress: ${dayName} Cycle (${progress}%)`,
+        exercises: newExercises,
+        progress: progress
+      };
+
+      setExp(prev => prev + 100);
+      saveArchiveEdit(newEntry);
+      triggerCloudSync();
+    }
   };
 
   const updateWorkoutItem = (id: string, field: keyof WorkoutItem, value: any) => {
@@ -1812,14 +2009,23 @@ function App() {
     }
   }, [selectedProgramId, programStartDate, weakpointFocus]);
   const calculateStreak = () => {
-    if (archive.length === 0) return 0;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const isTodayCompleted = workout.length > 0 && workout.every(e => e.completed);
+
+    const completedDateList = archive
+      .filter(e => e.type === 'COMPLETED')
+      .map(e => e.date);
+
+    if (isTodayCompleted && !completedDateList.includes(todayStr)) {
+      completedDateList.push(todayStr);
+    }
+
+    if (completedDateList.length === 0) return 0;
     
     // Get unique dates with COMPLETED status, sorted descending
-    const completedDates = Array.from(new Set<string>(
-      archive
-        .filter(e => e.type === 'COMPLETED')
-        .map(e => e.date)
-    )).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    const completedDates = Array.from(new Set<string>(completedDateList)).sort(
+      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+    );
 
     if (completedDates.length === 0) return 0;
 
@@ -1898,7 +2104,7 @@ function App() {
       { label: 'Active Streak', value: `${calculateStreak()} DAYS`, icon: Shield, color: 'text-primary-container' },
       { label: 'Rank Status', value: rankStatus, icon: Target, color: 'text-primary-container' },
     ];
-  }, [archive, currentRank]);
+  }, [archive, currentRank, workout]);
 
   return (
     <div className="min-h-screen bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container relative overflow-x-hidden">
@@ -2547,10 +2753,16 @@ function App() {
                             const hasCompletedWorkout = dayEntries.some(e => e.type === 'COMPLETED');
                             const hasIncompleteWorkout = dayEntries.some(e => e.type === 'INCOMPLETE' || e.type === 'BREACH');
                             const isPastDay = day < new Date(new Date().setHours(0, 0, 0, 0));
+                            const isToday = isSameDay(day, new Date());
+                            const todayCompletedCount = workout.filter(e => e.completed).length;
+                            const isTodayFullyCompleted = workout.length > 0 && todayCompletedCount === workout.length;
+                            const isTodayPartiallyCompleted = todayCompletedCount > 0 && !isTodayFullyCompleted;
                             
                             let dotColorClass = "bg-neutral-500/40 shadow-none"; // default (not happened yet / grey)
-                            if (hasCompletedWorkout) {
-                              dotColorClass = "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]";
+                            if (hasCompletedWorkout || (isToday && isTodayFullyCompleted)) {
+                              dotColorClass = "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]";
+                            } else if (isToday && isTodayPartiallyCompleted) {
+                              dotColorClass = "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)] animate-pulse";
                             } else if (hasIncompleteWorkout || isPastDay) {
                               dotColorClass = "bg-error shadow-[0_0_5px_rgba(255,68,68,0.5)]";
                             }
@@ -2564,14 +2776,19 @@ function App() {
                                 } ${isSelected ? 'ring-2 ring-primary-container ring-inset z-10' : ''} border-r border-b border-white/5 overflow-hidden flex flex-col items-center`}
                               >
                                 <div className="flex justify-between items-start w-full">
-                                  <span className={`font-mono text-xs md:text-sm ${isSameDay(day, new Date()) ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
+                                  <span className={`font-mono text-xs md:text-sm ${isToday ? 'text-primary-container font-bold' : 'text-on-surface-variant'}`}>
                                     {format(day, 'd')}
                                   </span>
-                                  {isInProgram && isCurrentMonth && (
-                                    <span className={`text-[6px] text-primary-container font-bold`}>
-                                      W{weekNum}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-1">
+                                    {(hasCompletedWorkout || (isToday && isTodayFullyCompleted)) && isCurrentMonth && (
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                    )}
+                                    {isInProgram && isCurrentMonth && (
+                                      <span className={`text-[6px] text-primary-container font-bold`}>
+                                        W{weekNum}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 
                                 {isInProgram && isCurrentMonth && (
@@ -2638,29 +2855,49 @@ function App() {
                               const mappedDay = dayMapping[dayName] || dayName;
                               const exercises = weekData?.days[mappedDay] || [];
                               const dateStr = format(selectedScheduleDate, 'yyyy-MM-dd');
+                              const isSelectedToday = isSameDay(selectedScheduleDate, new Date());
                               const loggedEntries = archive.filter(e => e.date === dateStr);
                               const loggedExercises = loggedEntries.flatMap(e => e.exercises || []);
                               const isLogged = loggedExercises.length > 0;
-                              const displayExercises = isLogged ? loggedExercises : exercises;
+
+                              const weekSchedule = schedule[weekNum] || [];
+                              const schedDay = weekSchedule.find(s => s.day === mappedDay || s.day === dayName);
+                              const scheduleExercises = schedDay?.exercises || [];
+
+                              const displayExercises = (isSelectedToday && workout.length > 0)
+                                ? workout
+                                : (isLogged ? loggedExercises : (scheduleExercises.length > 0 ? scheduleExercises : exercises));
                               
                               const isRestDay = displayExercises.length === 0 && !isLogged;
                               const dayLabel = program?.dayLabels?.[mappedDay];
+
+                              const completedTasksCount = displayExercises.filter((ex: any) => ex.completed).length;
+                              const totalTasksCount = displayExercises.length;
+                              const allTasksCompleted = totalTasksCount > 0 && completedTasksCount === totalTasksCount;
+                              const hasSomeTasksCompleted = completedTasksCount > 0 && !allTasksCompleted;
 
                               return (
                                 <div className="space-y-4">
                                   <div className="flex justify-between items-center border-b border-white/5 pb-2">
                                     <div className="font-label text-xs text-on-surface-variant flex items-center gap-2">
                                       Week {weekNum} • {dayName}
-                                      {isLogged && (
+                                      {allTasksCompleted ? (
+                                        <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3" /> COMPLETED ({completedTasksCount}/{totalTasksCount})
+                                        </span>
+                                      ) : hasSomeTasksCompleted ? (
+                                        <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">
+                                          IN PROGRESS ({completedTasksCount}/{totalTasksCount})
+                                        </span>
+                                      ) : isLogged ? (
                                         <span className="bg-primary-container/20 text-primary-container px-2 py-0.5 rounded text-[10px] font-bold">
                                           LOGGED
                                         </span>
-                                      )}
-                                      {!isLogged && !isRestDay && (
+                                      ) : !isRestDay ? (
                                         <span className="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded text-[10px] font-bold">
                                           PLANNED
                                         </span>
-                                      )}
+                                      ) : null}
                                     </div>
                                     {dayLabel && (
                                       <div className="font-label text-[10px] text-primary-container/80 font-bold border border-primary-container/20 px-1.5 py-0.5">
@@ -2668,6 +2905,37 @@ function App() {
                                       </div>
                                     )}
                                   </div>
+
+                                  {isSelectedToday && (
+                                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-high/60 border border-white/5">
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cardioCompleted ? 'bg-emerald-500/20 text-emerald-400' : 'bg-primary-container/10 text-primary-container'}`}>
+                                          <Activity className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                          <div className={`font-sans font-semibold text-xs md:text-sm font-bold ${cardioCompleted ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                                            Treadmill Protocol (30-45 Min)
+                                          </div>
+                                          <div className="font-label text-[10px] text-on-surface-variant">LISS / HIIT Conditioning</div>
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!isTimerActive) setIsTimerActive(true);
+                                          setCardioCompleted(!cardioCompleted);
+                                          triggerCloudSync();
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                                          cardioCompleted 
+                                            ? 'bg-emerald-500 text-black border-emerald-400 font-bold shadow-[0_0_8px_rgba(16,185,129,0.4)]' 
+                                            : 'bg-primary-container/10 text-primary-container border-primary-container/30 hover:bg-primary-container/20'
+                                        }`}
+                                      >
+                                        {cardioCompleted ? 'Completed' : 'Mark Done'}
+                                      </button>
+                                    </div>
+                                  )}
                                   
                                   {isRestDay ? (
                                     <div className="flex flex-col items-center justify-center py-8 text-on-surface-variant/30">
@@ -2676,64 +2944,97 @@ function App() {
                                     </div>
                                   ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                      {displayExercises.map((ex: any, exIdx: number) => (
-                                        <div key={exIdx} className={`bg-surface-container-high rounded-xl p-3 border ${ex.completed ? 'border-emerald-500/30' : 'border-white/5'}`}>
-                                          <div className="font-sans font-semibold text-sm text-on-surface flex justify-between">
-                                            {ex.name}
-                                            {ex.completed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                                          </div>
-                                          <div className="flex justify-between items-center mt-2 mb-2">
-                                            <span className="font-label text-[10px] text-on-surface-variant">{ex.target || 'N/A'}</span>
-                                            <span className="font-mono text-xs text-primary-container">
-                                              {ex.sets} Sets
-                                            </span>
-                                          </div>
-                                          
-                                          {ex.setData ? (
-                                            <div className="grid grid-cols-1 gap-2 pt-2 border-t border-outline-variant/5">
-                                              {ex.setData.map((s: any, idx: number) => (
-                                                <div key={idx} className="flex items-center justify-between p-2 bg-surface-container-highest/20 border border-white/5 rounded">
-                                                  <div className="flex items-center gap-2">
-                                                    <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
-                                                      <span className="font-sans font-semibold text-xs font-bold text-primary-container">{idx + 1}</span>
-                                                    </div>
-                                                    <span className="font-label text-xs text-on-surface-variant">Set</span>
-                                                  </div>
-                                                  <div className="flex gap-3">
-                                                    <div className="text-right">
-                                                      <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Weight</div>
-                                                      <div className="font-mono text-sm text-on-surface leading-none">{s.weight}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                      <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Reps</div>
-                                                      <div className="font-mono text-sm text-on-surface leading-none">{s.reps}</div>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              ))}
+                                      {displayExercises.map((ex: any, exIdx: number) => {
+                                        const isExCompleted = Boolean(ex.completed);
+                                        return (
+                                          <div 
+                                            key={ex.id || exIdx} 
+                                            className={`bg-surface-container-high rounded-xl p-3 border transition-all ${
+                                              isExCompleted 
+                                                ? 'border-emerald-500/40 bg-emerald-950/20 shadow-[0_0_12px_rgba(16,185,129,0.1)]' 
+                                                : 'border-white/5 hover:border-white/20'
+                                            }`}
+                                          >
+                                            <div className="font-sans font-semibold text-sm text-on-surface flex justify-between items-center gap-2">
+                                              <span className={`transition-colors ${isExCompleted ? 'line-through text-on-surface-variant font-medium' : 'text-on-surface font-semibold'}`}>
+                                                {ex.name}
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  toggleScheduleExercise(ex.id || `ex-${exIdx}`, ex.name);
+                                                }}
+                                                className={`flex items-center justify-center w-7 h-7 rounded-lg transition-all shrink-0 ${
+                                                  isExCompleted
+                                                    ? 'bg-emerald-500 text-black shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                                                    : 'border border-primary-container/30 bg-primary-container/5 hover:bg-primary-container/20 text-primary-container'
+                                                }`}
+                                                title={isExCompleted ? "Mark Incomplete" : "Mark Completed"}
+                                              >
+                                                {isExCompleted ? <CheckCircle2 className="w-4 h-4 text-black stroke-[2.5]" /> : <Check className="w-4 h-4 text-primary-container" />}
+                                              </button>
                                             </div>
-                                          ) : (
-                                            <div className="flex justify-between items-center p-2 bg-surface-container-highest/20 border border-white/5 rounded pt-2 mt-2">
+                                            <div className="flex justify-between items-center mt-2 mb-2">
+                                              <span className="font-label text-[10px] text-on-surface-variant">{ex.target || 'N/A'}</span>
                                               <div className="flex items-center gap-2">
-                                                <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
-                                                  <span className="font-sans font-semibold text-xs font-bold text-primary-container">1</span>
-                                                </div>
-                                                <span className="font-label text-xs text-on-surface-variant">Standard Protocol</span>
-                                              </div>
-                                              <div className="flex gap-3">
-                                                <div className="text-right">
-                                                  <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Weight</div>
-                                                  <div className="font-mono text-sm text-on-surface leading-none">{ex.weight || '-'}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                  <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Reps</div>
-                                                  <div className="font-mono text-sm text-on-surface leading-none">{ex.reps || '-'}</div>
-                                                </div>
+                                                {isExCompleted && (
+                                                  <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                                    COMPLETED
+                                                  </span>
+                                                )}
+                                                <span className="font-mono text-xs text-primary-container">
+                                                  {ex.sets} Sets
+                                                </span>
                                               </div>
                                             </div>
-                                          )}
-                                        </div>
-                                      ))}
+                                            
+                                            {ex.setData ? (
+                                              <div className="grid grid-cols-1 gap-2 pt-2 border-t border-outline-variant/5">
+                                                {ex.setData.map((s: any, idx: number) => (
+                                                  <div key={idx} className="flex items-center justify-between p-2 bg-surface-container-highest/20 border border-white/5 rounded">
+                                                    <div className="flex items-center gap-2">
+                                                      <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
+                                                        <span className="font-sans font-semibold text-xs font-bold text-primary-container">{idx + 1}</span>
+                                                      </div>
+                                                      <span className="font-label text-xs text-on-surface-variant">Set</span>
+                                                    </div>
+                                                    <div className="flex gap-3">
+                                                      <div className="text-right">
+                                                        <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Weight</div>
+                                                        <div className="font-mono text-sm text-on-surface leading-none">{s.weight}</div>
+                                                      </div>
+                                                      <div className="text-right">
+                                                        <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Reps</div>
+                                                        <div className="font-mono text-sm text-on-surface leading-none">{s.reps}</div>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            ) : (
+                                              <div className="flex justify-between items-center p-2 bg-surface-container-highest/20 border border-white/5 rounded pt-2 mt-2">
+                                                <div className="flex items-center gap-2">
+                                                  <div className="w-5 h-5 rounded-full bg-primary-container/10 border border-primary-container/20 flex items-center justify-center">
+                                                    <span className="font-sans font-semibold text-xs font-bold text-primary-container">1</span>
+                                                  </div>
+                                                  <span className="font-label text-xs text-on-surface-variant">Standard Protocol</span>
+                                                </div>
+                                                <div className="flex gap-3">
+                                                  <div className="text-right">
+                                                    <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Weight</div>
+                                                    <div className="font-mono text-sm text-on-surface leading-none">{ex.weight || '-'}</div>
+                                                  </div>
+                                                  <div className="text-right">
+                                                    <div className="text-[6px] text-on-surface-variant/50 leading-none mb-0.5">Reps</div>
+                                                    <div className="font-mono text-sm text-on-surface leading-none">{ex.reps || '-'}</div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>
@@ -2931,21 +3232,36 @@ function App() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { id: 'wolf', name: 'Blood Wolf', color: '#ff4d4d' },
-                  { id: 'spotify', name: 'Spotify Green', color: '#1ed760' },
-                  { id: 'red', name: 'Easfly Red', color: '#e54d4d' },
+                  { id: 'blue', name: 'Cyber Blue', color: '#3b82f6' },
                   { id: 'cyan', name: 'Neon Cyan', color: '#00e5ff' },
+                  { id: 'wolf', name: 'Blood Wolf', color: '#ff4d4d' },
                   { id: 'purple', name: 'Void Purple', color: '#9d4edd' },
                   { id: 'emerald', name: 'Matrix Green', color: '#10b981' },
+                  { id: 'spotify', name: 'Spotify Green', color: '#1ed760' },
+                  { id: 'red', name: 'Easfly Red', color: '#e54d4d' },
                   { id: 'mint', name: 'Mint & White', color: '#16a34a' },
                 ].map(t => (
                   <button
                     key={t.id}
-                    onClick={() => { setTheme(t.id as any); setIsThemeModalOpen(false); }}
-                    className={`p-4 border flex flex-col items-center gap-3 transition-all ${theme === t.id ? 'border-primary-container bg-surface-container-high' : 'border-outline-variant hover:border-primary-container/50 bg-surface-container-low'}`}
+                    type="button"
+                    onClick={() => { 
+                      handleThemeChange(t.id as any); 
+                      setIsThemeModalOpen(false); 
+                    }}
+                    className={`p-4 border flex flex-col items-center gap-3 transition-all rounded-xl relative ${
+                      theme === t.id 
+                        ? 'border-primary-container bg-surface-container-high ring-2 ring-primary-container/50 shadow-[0_0_15px_rgba(var(--theme-glow),0.25)]' 
+                        : 'border-outline-variant hover:border-primary-container/50 bg-surface-container-low hover:bg-surface-container-high/50'
+                    }`}
                   >
-                    <div className="w-8 h-8 rounded-full" style={{ backgroundColor: t.color }}></div>
-                    <span className="font-label text-xs text-on-surface">{t.name}</span>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shadow-lg relative" style={{ backgroundColor: t.color }}>
+                      {theme === t.id && (
+                        <Check className="w-5 h-5 text-white drop-shadow stroke-[3]" />
+                      )}
+                    </div>
+                    <span className={`font-label text-xs font-semibold ${theme === t.id ? 'text-primary-container font-bold' : 'text-on-surface'}`}>
+                      {t.name}
+                    </span>
                   </button>
                 ))}
               </div>
